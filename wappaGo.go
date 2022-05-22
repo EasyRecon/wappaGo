@@ -127,6 +127,11 @@ func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]
 	var errHttp error
 	if len(testWrapper) > 1 && (testWrapper[0] == "http" || testWrapper[0] == "https") {
 		client := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				hote.Redirect_to = fmt.Sprintf("%s", req.URL)
 				testScheme := strings.Split(hote.Redirect_to, "://")
@@ -520,8 +525,6 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 			}
 		}
 	}
-
-	fmt.Println(hote.Title)
 	return hote.Technologies
 }
 
