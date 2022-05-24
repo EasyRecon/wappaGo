@@ -9,8 +9,8 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,23 +31,25 @@ import (
 
 type Technologie struct {
 	Name       string `json:"name"`
-	Version    string `json:"version"`
-	Cpe        string `json:"cpe"`
-	Confidence string `json:"confidence"`
+	Version    string `json:"version,omitempty"`
+	Cpe        string `json:"cpe,omitempty"`
+	Confidence string `json:"confidence,omitempty"`
 }
 
 type Host struct {
-	Status_code   int           `json:"status_code"`
-	Port          int           `json:"port"`
-	Path          string        `json:"path"`
-	Redirect_to   string        `json:"redirect_to"`
-	Title         string        `json:"title"`
-	Host          string        `json:"host"`
-	Scheme        string        `json:"scheme"`
-	Data          string        `json:"data"`
-	Response_time string        `json:"response_time"`
-	Screenshot    string        `json:"screenshot_name"`
-	Technologies  []Technologie `json:"technologies"`
+	Status_code    int           `json:"status_code"`
+	Port           int           `json:"port"`
+	Path           string        `json:"path"`
+	Location       string        `json:"location,omitempty"`
+	Title          string        `json:"title"`
+	Host           string        `json:"host"`
+	Scheme         string        `json:"scheme"`
+	Data           string        `json:"data"`
+	Response_time  string        `json:"response_time"`
+	Screenshot     string        `json:"screenshot_name,omitempty"`
+	Technologies   []Technologie `json:"technologies"`
+	Content_length int           `json:"content-length`
+	Content_type   string        `json:"content-type`
 }
 type Options struct {
 	Screenshot *string
@@ -70,7 +72,7 @@ type Response struct {
 	Duration time.Duration
 }
 
-var interrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies"}
+var interrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url"}
 
 func main() {
 	options := Options{}
@@ -113,14 +115,17 @@ func main() {
 	portList := strings.Split(*options.Ports, ",")
 
 	for scanner.Scan() {
+		url := scanner.Text()
 		for _, port := range portList {
-
-			url := strings.TrimSpace(scanner.Text())
-			swg.Add()
-			go func(port string) {
-				defer swg.Done()
-				lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot)
-			}(port)
+			openPort := scanPort("tcp", url, port)
+			if openPort {
+				url := strings.TrimSpace(url)
+				swg.Add()
+				go func(port string) {
+					defer swg.Done()
+					lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot)
+				}(port)
+			}
 
 		}
 		swg.Wait()
@@ -142,90 +147,70 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	})
 	//	defer cancel()
 	hote := Host{}
-
+	hote.Data = urlData
 	hote.Port, _ = strconv.Atoi(port)
 	errorContinue := true
-	u, err := url.Parse(urlData)
+	//u, err := url.Parse(urlData)
 	var resp *http.Response
 	var errPlain error
 	var errSSL error
-	var errHttp error
-	if u.Scheme != "" {
-		client := &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
+	urlDataPort := urlData + ":" + port
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
 			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				hote.Redirect_to = fmt.Sprintf("%s", req.URL)
-				ur, _ := url.Parse(fmt.Sprintf("%s", req.URL))
-				hote.Scheme = ur.Scheme
-				return http.ErrUseLastResponse
-			},
-		}
-		resp, errHttp = client.Get(urlData)
-		if errHttp != nil {
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			hote.Location = fmt.Sprintf("%s", req.URL)
+			return nil
+		},
+	}
+
+	resp, errSSL = client.Get("https://" + urlDataPort)
+	if errSSL != nil {
+		resp, errPlain = client.Get("http://" + urlDataPort)
+		if errPlain != nil {
+			if errPlain == http.ErrUseLastResponse {
+
+				if (resp.StatusCode == 301 || resp.StatusCode == 302) && len(resp.Header["Location"]) > 0 {
+					hote.Location = resp.Header["Location"][0]
+				}
+			}
 			errorContinue = false
 		} else {
 			if hote.Scheme == "" {
-				hote.Scheme = u.Scheme
+				hote.Scheme = "http"
 			}
-			hote.Host = u.Host
-		}
 
-	} else {
-		urlData = urlData + ":" + port
-		client := &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				hote.Redirect_to = fmt.Sprintf("%s", req.URL)
-				return http.ErrUseLastResponse
-			},
-		}
-
-		resp, errSSL = client.Get("https://" + urlData)
-		if errSSL != nil {
-			resp, errPlain = client.Get("http://" + urlData)
-			if errPlain != nil {
-				if errPlain == http.ErrUseLastResponse {
-
-					if (resp.StatusCode == 301 || resp.StatusCode == 302) && len(resp.Header["Location"]) > 0 {
-						hote.Redirect_to = resp.Header["Location"][0]
-					}
-				}
-				errorContinue = false
-			} else {
-				if hote.Scheme == "" {
-					hote.Scheme = "http"
-				}
-
-				urlData = "http://" + urlData
-				hote.Host = urlData
-			}
-		} else {
-			if errSSL == http.ErrUseLastResponse {
-				if (resp.StatusCode == 301 || resp.StatusCode == 302) && len(resp.Header["Location"]) > 0 {
-					hote.Redirect_to = resp.Header["Location"][0]
-				}
-			}
-			if hote.Scheme == "" {
-				hote.Scheme = "https"
-			}
-			urlData = "https://" + urlData
+			urlData = "http://" + urlDataPort
 			hote.Host = urlData
 		}
+	} else {
+		if errSSL == http.ErrUseLastResponse {
+			if (resp.StatusCode == 301 || resp.StatusCode == 302) && len(resp.Header["Location"]) > 0 {
+				hote.Location = resp.Header["Location"][0]
+			}
+		}
+		if hote.Scheme == "" {
+			hote.Scheme = "https"
+		}
+		urlData = "https://" + urlData
+		hote.Host = urlData
 	}
-	hote.Data = urlData
 
 	if errorContinue {
-		if hote.Redirect_to != "" {
-			urlData = hote.Redirect_to
+		if hote.Location != "" {
+			urlData = hote.Location
 		}
+		body, _ := ioutil.ReadAll(resp.Body)
+		//fmt.Println(fmt.Sprintf("%s", body))
+		hote.Content_length = len(body)
+		if len(resp.Header["Content-Type"]) > 0 {
+
+			hote.Content_type = strings.Split(resp.Header["Content-Type"][0], ";")[0]
+		}
+
 		hote.Status_code = resp.StatusCode
 		doc, err := goquery.NewDocumentFromReader(resp.Body)
 		if err != nil {
@@ -248,7 +233,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 			chromedp.Title(&hote.Title),
 			chromedp.FullScreenshot(&buf, 100),
 			chromedp.ActionFunc(func(ctx context.Context) error {
-				hote.Technologies = analyze(resultGlobal, resp, srcList, ctx)
+				hote.Technologies = analyze(resultGlobal, resp, srcList, ctx, hote)
 
 				return nil
 			}),
@@ -298,12 +283,12 @@ func dedupTechno(technologies []Technologie) []Technologie {
 	return output
 }
 
-func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList []string, ctx context.Context) []Technologie {
+func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList []string, ctx context.Context, hote Host) []Technologie {
 	node, _ := dom.GetDocument().Do(ctx)
 	body, _ := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
 
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(body))
-	hote := Host{}
+	//hote := Host{}
 	for technoName, _ := range resultGlobal {
 		for key, _ := range resultGlobal[technoName].(map[string]interface{}) {
 			if contains(interrestingKey, key) {
@@ -454,6 +439,28 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 
 					}
 				}
+				if key == "url" {
+					if hote.Location != "" {
+						if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "string" {
+							regex := resultGlobal[technoName].(map[string]interface{})[key].(string)
+							findregex, _ := regexp.MatchString("(?i)"+regex, hote.Location)
+							if findregex == true {
+								technoTemp := &Technologie{}
+								technoTemp.Name = technoName
+								hote.Technologies = append(hote.Technologies, *technoTemp)
+							}
+						} else {
+							for _, url := range resultGlobal[technoName].(map[string]interface{})[key].([]interface{}) {
+								findregex, _ := regexp.MatchString("(?i)"+url.(string), hote.Location)
+								if findregex == true {
+									technoTemp := &Technologie{}
+									technoTemp.Name = technoName
+									hote.Technologies = append(hote.Technologies, *technoTemp)
+								}
+							}
+						}
+					}
+				}
 
 				if key == "html" {
 					if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "string" {
@@ -516,33 +523,63 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 				if key == "meta" {
 					for metaKey, metaProperties := range resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{}) {
 
-						doc.Find("meta[name=\"" + metaKey + "\"]").Each(func(i int, s *goquery.Selection) {
-							metaValue, _ := s.Attr("content")
+						doc.Find("meta[name=\"" + metaKey + "\" i]").Each(func(i int, s *goquery.Selection) {
 
-							regex := strings.Split(fmt.Sprintf("%v", metaProperties), "\\;")
+							if fmt.Sprintf("%T", metaProperties) == "string" {
+								metaValue, _ := s.Attr("content")
+								regex := strings.Split(fmt.Sprintf("%v", metaProperties), "\\;")
+								findregex, _ := regexp.MatchString("(?i)"+regex[0], metaValue)
+								//fmt.Println(findregex, metaKey, metaProperties, technoName)
+								if findregex == true {
+									//fmt.Println(technoName)
+									technoTemp := &Technologie{}
+									technoTemp.Name = technoName
+									if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+										technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+									}
+									compiledregex := regexp.MustCompile("(?i)" + regex[0])
+									regexGroup := compiledregex.FindAllStringSubmatch(metaValue, -1)
 
-							findregex, _ := regexp.MatchString("(?i)"+regex[0], metaValue)
-							//fmt.Println(findregex, metaKey, metaProperties, technoName)
-							if findregex == true {
-								//fmt.Println(technoName)
-								technoTemp := &Technologie{}
-								technoTemp.Name = technoName
-								if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-									technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+									if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
+										versionGrp := strings.Split(regex[1], "\\")
+
+										if len(versionGrp) > 1 {
+											offset, _ := strconv.Atoi(versionGrp[1])
+											//fmt.Println(regexGroup[0][offset])
+											technoTemp.Version = regexGroup[0][offset]
+										}
+									}
+									hote.Technologies = append(hote.Technologies, *technoTemp)
 								}
-								compiledregex := regexp.MustCompile("(?i)" + regex[0])
-								regexGroup := compiledregex.FindAllStringSubmatch(metaValue, -1)
 
-								if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
-									versionGrp := strings.Split(regex[1], "\\")
+							} else {
+								for _, metaPropertiess := range metaProperties.([]interface{}) {
+									metaValue, _ := s.Attr("content")
+									regex := strings.Split(fmt.Sprintf("%v", metaPropertiess), "\\;")
+									findregex, _ := regexp.MatchString("(?i)"+regex[0], metaValue)
+									//fmt.Println(findregex, metaKey, metaPropertiess, technoName)
+									if findregex == true {
+										//fmt.Println(technoName)
+										technoTemp := &Technologie{}
+										technoTemp.Name = technoName
+										if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+											technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+										}
+										compiledregex := regexp.MustCompile("(?i)" + regex[0])
+										regexGroup := compiledregex.FindAllStringSubmatch(metaValue, -1)
 
-									if len(versionGrp) > 1 {
-										offset, _ := strconv.Atoi(versionGrp[1])
-										//fmt.Println(regexGroup[0][offset])
-										technoTemp.Version = regexGroup[0][offset]
+										if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
+											versionGrp := strings.Split(regex[1], "\\")
+
+											if len(versionGrp) > 1 {
+												offset, _ := strconv.Atoi(versionGrp[1])
+												//fmt.Println(regexGroup[0][offset])
+												technoTemp.Version = regexGroup[0][offset]
+											}
+										}
+										hote.Technologies = append(hote.Technologies, *technoTemp)
 									}
 								}
-								hote.Technologies = append(hote.Technologies, *technoTemp)
 							}
 						})
 					}
@@ -553,7 +590,16 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 	}
 	return hote.Technologies
 }
+func scanPort(protocol, hostname string, port string) bool {
+	address := hostname + ":" + port
+	conn, err := net.DialTimeout(protocol, address, 60*time.Second)
 
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
+}
 func loadTechnologiesFiles() map[string]interface{} {
 
 	// Open our jsonFile
