@@ -38,6 +38,7 @@ type Technologie struct {
 
 type Host struct {
 	Status_code   int           `json:"status_code"`
+	Port          int           `json:"port"`
 	Path          string        `json:"path"`
 	Redirect_to   string        `json:"redirect_to"`
 	Title         string        `json:"title"`
@@ -74,7 +75,7 @@ var interrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "ht
 func main() {
 	options := Options{}
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
-	options.Ports = flag.String("ports", "", "port want to scan separated by coma")
+	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
 	options.Threads = flag.Int("threads", 10, "Number of threads in same time")
 	flag.Parse()
 
@@ -106,20 +107,26 @@ func main() {
 	if err := chromedp.Run(ctxAlloc1); err != nil {
 		panic(err)
 	}
+
 	resultGlobal := loadTechnologiesFiles()
 	swg := sizedwaitgroup.New(*options.Threads)
-	for scanner.Scan() {
-		url := strings.TrimSpace(scanner.Text())
-		swg.Add()
-		go func() {
-			defer swg.Done()
-			lauchChrome(url, ctxAlloc1, resultGlobal, *options.Screenshot)
-		}()
+	portList := strings.Split(*options.Ports, ",")
 
+	for scanner.Scan() {
+		for _, port := range portList {
+
+			url := strings.TrimSpace(scanner.Text())
+			swg.Add()
+			go func(port string) {
+				defer swg.Done()
+				lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot)
+			}(port)
+
+		}
+		swg.Wait()
 	}
-	swg.Wait()
 }
-func lauchChrome(urlData string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string) {
+func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string) {
 	cloneCTX, _ := chromedp.NewContext(ctxAlloc1)
 	chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
@@ -135,6 +142,8 @@ func lauchChrome(urlData string, ctxAlloc1 context.Context, resultGlobal map[str
 	})
 	//	defer cancel()
 	hote := Host{}
+
+	hote.Port, _ = strconv.Atoi(port)
 	errorContinue := true
 	u, err := url.Parse(urlData)
 	var resp *http.Response
@@ -150,10 +159,8 @@ func lauchChrome(urlData string, ctxAlloc1 context.Context, resultGlobal map[str
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				hote.Redirect_to = fmt.Sprintf("%s", req.URL)
-				testScheme := strings.Split(hote.Redirect_to, "://")
-				if len(testScheme) > 1 {
-					hote.Scheme = testScheme[0]
-				}
+				ur, _ := url.Parse(fmt.Sprintf("%s", req.URL))
+				hote.Scheme = ur.Scheme
 				return http.ErrUseLastResponse
 			},
 		}
@@ -168,6 +175,7 @@ func lauchChrome(urlData string, ctxAlloc1 context.Context, resultGlobal map[str
 		}
 
 	} else {
+		urlData = urlData + ":" + port
 		client := &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
