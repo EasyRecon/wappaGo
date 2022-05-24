@@ -4,18 +4,19 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"flag"
-	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/dom"
@@ -51,6 +52,21 @@ type Options struct {
 	Screenshot *string
 	Ports      *string
 	Threads    *int
+}
+type Response struct {
+	StatusCode    int
+	Headers       map[string][]string
+	Data          []byte
+	ContentLength int
+	Raw           string
+	RawHeaders    string
+	Words         int
+	Lines         int
+	TLSData       *cryptoutil.TLSData
+
+	HTTP2    bool
+	Pipeline bool
+	Duration time.Duration
 }
 
 var interrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies"}
@@ -103,7 +119,7 @@ func main() {
 	}
 	swg.Wait()
 }
-func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string) {
+func lauchChrome(urlData string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string) {
 	cloneCTX, _ := chromedp.NewContext(ctxAlloc1)
 	chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
@@ -120,12 +136,12 @@ func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]
 	//	defer cancel()
 	hote := Host{}
 	errorContinue := true
-	testWrapper := strings.Split(url, "://")
+	u, err := url.Parse(urlData)
 	var resp *http.Response
 	var errPlain error
 	var errSSL error
 	var errHttp error
-	if len(testWrapper) > 1 && (testWrapper[0] == "http" || testWrapper[0] == "https") {
+	if u.Scheme != "" {
 		client := &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -141,14 +157,14 @@ func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]
 				return http.ErrUseLastResponse
 			},
 		}
-		resp, errHttp = client.Get(url)
+		resp, errHttp = client.Get(urlData)
 		if errHttp != nil {
 			errorContinue = false
 		} else {
 			if hote.Scheme == "" {
-				hote.Scheme = testWrapper[0]
+				hote.Scheme = u.Scheme
 			}
-			hote.Host = strings.Split(testWrapper[1], "/")[0]
+			hote.Host = u.Host
 		}
 
 	} else {
@@ -164,9 +180,9 @@ func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]
 			},
 		}
 
-		resp, errSSL = client.Get("https://" + url)
+		resp, errSSL = client.Get("https://" + urlData)
 		if errSSL != nil {
-			resp, errPlain = client.Get("http://" + url)
+			resp, errPlain = client.Get("http://" + urlData)
 			if errPlain != nil {
 				if errPlain == http.ErrUseLastResponse {
 
@@ -180,8 +196,8 @@ func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]
 					hote.Scheme = "http"
 				}
 
-				url = "http://" + url
-				hote.Host = url
+				urlData = "http://" + urlData
+				hote.Host = urlData
 			}
 		} else {
 			if errSSL == http.ErrUseLastResponse {
@@ -192,15 +208,17 @@ func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]
 			if hote.Scheme == "" {
 				hote.Scheme = "https"
 			}
-			url = "https://" + url
-			hote.Host = url
+			urlData = "https://" + urlData
+			hote.Host = urlData
 		}
 	}
-	hote.Data = url
+	hote.Data = urlData
 
 	if errorContinue {
+		if hote.Redirect_to != "" {
+			urlData = hote.Redirect_to
+		}
 		hote.Status_code = resp.StatusCode
-
 		doc, err := goquery.NewDocumentFromReader(resp.Body)
 		if err != nil {
 			log.Fatal(err)
@@ -218,7 +236,7 @@ func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]
 		//var res []string
 		var buf []byte
 		err = chromedp.Run(cloneCTX,
-			chromedp.Navigate(url),
+			chromedp.Navigate(urlData),
 			chromedp.Title(&hote.Title),
 			chromedp.FullScreenshot(&buf, 100),
 			chromedp.ActionFunc(func(ctx context.Context) error {
@@ -229,7 +247,7 @@ func lauchChrome(url string, ctxAlloc1 context.Context, resultGlobal map[string]
 		)
 		hote.Technologies = dedupTechno(hote.Technologies)
 		if screen != "" && len(buf) > 0 {
-			imgTitle := strings.Replace(url, ":", "_", -1)
+			imgTitle := strings.Replace(urlData, ":", "_", -1)
 			imgTitle = strings.Replace(imgTitle, "/", "", -1)
 			imgTitle = strings.Replace(imgTitle, ".", "_", -1)
 			//fmt.Println(screen + "/" + imgTitle + ".png")
@@ -590,4 +608,23 @@ func TLSGrab(r *http.Response) *cryptoutil.TLSData {
 		return cryptoutil.TLSGrab(r.TLS)
 	}
 	return nil
+}
+func (r *Response) GetHeader(name string) string {
+	v, ok := r.Headers[name]
+	if ok {
+		return strings.Join(v, " ")
+	}
+
+	return ""
+}
+
+// GetHeaderPart with offset
+func (r *Response) GetHeaderPart(name, sep string) string {
+	v, ok := r.Headers[name]
+	if ok && len(v) > 0 {
+		tokens := strings.Split(strings.Join(v, " "), sep)
+		return tokens[0]
+	}
+
+	return ""
 }

@@ -20,6 +20,7 @@ require (
 	github.com/gobwas/ws v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/projectdiscovery/retryablehttp-go v1.0.2 // indirect
 	github.com/weppos/publicsuffix-go v0.15.1-0.20210928183822-5ee35905bd95 // indirect
 	github.com/zmap/rc2 v0.0.0-20131011165748-24b9757f5521 // indirect
 	github.com/zmap/zcrypto v0.0.0-20211005224000-2d0ffdec8a9b // indirect
