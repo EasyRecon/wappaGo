@@ -25,7 +25,9 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/goccy/go-json"
 	"github.com/imdario/mergo"
+	"github.com/projectdiscovery/cdncheck"
 	"github.com/projectdiscovery/cryptoutil"
+	"github.com/projectdiscovery/fastdialer/fastdialer"
 	"github.com/remeh/sizedwaitgroup"
 )
 
@@ -48,13 +50,18 @@ type Host struct {
 	Response_time  string        `json:"response_time"`
 	Screenshot     string        `json:"screenshot_name,omitempty"`
 	Technologies   []Technologie `json:"technologies"`
-	Content_length int           `json:"content-length`
-	Content_type   string        `json:"content-type`
+	Content_length int           `json:"content_length`
+	Content_type   string        `json:"content_type`
+	IP             string        `json:"ip`
+	Cname          []string      `json:"cname,omitempty"`
 }
 type Options struct {
-	Screenshot *string
-	Ports      *string
-	Threads    *int
+	Screenshot  *string
+	Ports       *string
+	Threads     *int
+	Porttimeout *int
+	Cdn         *bool
+	Resolvers   *string
 }
 type Response struct {
 	StatusCode    int
@@ -79,6 +86,9 @@ func main() {
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
 	options.Threads = flag.Int("threads", 10, "Number of threads in same time")
+	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
+	options.Cdn = flag.Bool("cdn", true, "Exclude port scanning on cdn")
+	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
 	flag.Parse()
 
 	if *options.Screenshot != "" {
@@ -95,7 +105,18 @@ func main() {
 		}
 		defer file.Close()
 	}
+	fastdialerOpts := fastdialer.DefaultOptions
+	fastdialerOpts.EnableFallback = true
+	fastdialerOpts.WithDialerHistory = true
 
+	if len(*options.Resolvers) > 0 {
+		fastdialerOpts.BaseResolvers = strings.Split(*options.Resolvers, ",")
+	}
+	dialer, err := fastdialer.NewDialer(fastdialerOpts)
+	defer dialer.Close()
+	if err != nil {
+		fmt.Errorf("could not create resolver cache: %s", err)
+	}
 	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
 	//urls, _ := reader.ReadString('\n')
 
@@ -113,25 +134,47 @@ func main() {
 	resultGlobal := loadTechnologiesFiles()
 	swg := sizedwaitgroup.New(*options.Threads)
 	portList := strings.Split(*options.Ports, ",")
-
+	cdn, err := cdncheck.NewWithCache()
 	for scanner.Scan() {
+		portTemp := portList
 		url := scanner.Text()
-		for _, port := range portList {
-			openPort := scanPort("tcp", url, port)
-			if openPort {
-				url := strings.TrimSpace(url)
-				swg.Add()
-				go func(port string) {
-					defer swg.Done()
-					lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot)
-				}(port)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if *options.Cdn {
+			ip, err := net.LookupIP(url)
+			if err != nil {
+				continue
 			}
+			isCDN, _, err := cdn.Check(ip[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(isCDN)
+			if isCDN {
+				portTemp = []string{"80", "443"}
+			}
+		}
+		for _, port := range portTemp {
+
+			url := strings.TrimSpace(url)
+			swg.Add()
+			go func(port string, url string, portTimout int, dialer *fastdialer.Dialer) {
+				defer swg.Done()
+				openPort := scanPort("tcp", url, port, portTimout)
+				if openPort {
+					lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot, dialer)
+				}
+			}(port, url, *options.Porttimeout, dialer)
 
 		}
 		swg.Wait()
 	}
 }
-func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string) {
+func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer) {
+
 	cloneCTX, _ := chromedp.NewContext(ctxAlloc1)
 	chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
@@ -150,16 +193,21 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	hote.Data = urlData
 	hote.Port, _ = strconv.Atoi(port)
 	errorContinue := true
+
 	//u, err := url.Parse(urlData)
 	var resp *http.Response
 	var errPlain error
 	var errSSL error
 	urlDataPort := urlData + ":" + port
+
 	client := &http.Client{
+		Timeout: 3 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 			},
+			DialContext:       dialer.Dial,
+			DisableKeepAlives: true,
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			hote.Location = fmt.Sprintf("%s", req.URL)
@@ -198,6 +246,12 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		urlData = "https://" + urlData
 		hote.Host = urlData
 	}
+	ip := dialer.GetDialedIP(hote.Data)
+	hote.IP = ip
+	dnsData, err := dialer.GetDNSData(urlData)
+	if dnsData != nil && err == nil {
+		hote.Cname = dnsData.CNAME
+	}
 
 	if errorContinue {
 		if hote.Location != "" {
@@ -228,6 +282,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		// run task list
 		//var res []string
 		var buf []byte
+
 		err = chromedp.Run(cloneCTX,
 			chromedp.Navigate(urlData),
 			chromedp.Title(&hote.Title),
@@ -440,6 +495,7 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 					}
 				}
 				if key == "url" {
+
 					if hote.Location != "" {
 						if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "string" {
 							regex := resultGlobal[technoName].(map[string]interface{})[key].(string)
@@ -460,6 +516,7 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 							}
 						}
 					}
+
 				}
 
 				if key == "html" {
@@ -590,9 +647,9 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 	}
 	return hote.Technologies
 }
-func scanPort(protocol, hostname string, port string) bool {
+func scanPort(protocol, hostname string, port string, portTimeout int) bool {
 	address := hostname + ":" + port
-	conn, err := net.DialTimeout(protocol, address, 60*time.Second)
+	conn, err := net.DialTimeout(protocol, address, time.Duration(portTimeout)*time.Millisecond)
 
 	if err != nil {
 		return false
