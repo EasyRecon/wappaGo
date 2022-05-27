@@ -40,7 +40,7 @@ type Technologie struct {
 
 type Host struct {
 	Status_code    int           `json:"status_code"`
-	Port           int           `json:"port"`
+	Ports          []string      `json:"ports"`
 	Path           string        `json:"path"`
 	Location       string        `json:"location,omitempty"`
 	Title          string        `json:"title"`
@@ -54,6 +54,7 @@ type Host struct {
 	Content_type   string        `json:"content_type`
 	IP             string        `json:"ip`
 	Cname          []string      `json:"cname,omitempty"`
+	CDN            string        `json:"cdn,omitempty"`
 }
 type Options struct {
 	Screenshot  *string
@@ -135,7 +136,9 @@ func main() {
 	swg := sizedwaitgroup.New(*options.Threads)
 	portList := strings.Split(*options.Ports, ",")
 	cdn, err := cdncheck.NewWithCache()
+
 	for scanner.Scan() {
+		var CdnName string
 		portTemp := portList
 		url := scanner.Text()
 
@@ -144,36 +147,57 @@ func main() {
 		}
 
 		if *options.Cdn {
-			ip, err := net.LookupIP(url)
-			if err != nil {
-				continue
+			client := &http.Client{
+				Timeout: 3 * time.Second,
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true,
+					},
+					DialContext:       dialer.Dial,
+					DisableKeepAlives: true,
+				},
 			}
-			isCDN, _, err := cdn.Check(ip[0])
+
+			client.Get("http://" + url)
+			ip := dialer.GetDialedIP(url)
+			isCDN, cdnName, err := cdn.Check(net.ParseIP(ip))
+			//fmt.Println(isCDN, ip)
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Println(isCDN)
+			//fmt.Println(isCDN)
 			if isCDN {
 				portTemp = []string{"80", "443"}
+				CdnName = cdnName
 			}
 		}
-		for _, port := range portTemp {
+		var portOpen []string
+		for _, portEnum := range portTemp {
 
-			url := strings.TrimSpace(url)
-			swg.Add()
-			go func(port string, url string, portTimout int, dialer *fastdialer.Dialer) {
-				defer swg.Done()
-				openPort := scanPort("tcp", url, port, portTimout)
-				if openPort {
-					lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot, dialer)
-				}
-			}(port, url, *options.Porttimeout, dialer)
+			openPort := scanPort("tcp", url, portEnum, *options.Porttimeout)
 
+			if openPort {
+				portOpen = append(portOpen, portEnum)
+			}
 		}
-		swg.Wait()
+
+		url = strings.TrimSpace(url)
+
+		for _, port := range portOpen {
+			swg.Add()
+			go func(port string, url string, portOpen []string, dialer *fastdialer.Dialer, CdnName string) {
+				defer swg.Done()
+
+				lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot, dialer, portOpen, CdnName)
+
+			}(port, url, portOpen, dialer, CdnName)
+		}
+
 	}
+	swg.Wait()
 }
-func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer) {
+
+func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string) {
 
 	cloneCTX, _ := chromedp.NewContext(ctxAlloc1)
 	chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
@@ -190,8 +214,9 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	})
 	//	defer cancel()
 	hote := Host{}
+	hote.CDN = CdnName
 	hote.Data = urlData
-	hote.Port, _ = strconv.Atoi(port)
+	hote.Ports = portOpen
 	errorContinue := true
 
 	//u, err := url.Parse(urlData)
@@ -422,7 +447,6 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 
 										if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
 											versionGrp := strings.Split(regex[1], "\\")
-
 											if len(versionGrp) > 1 {
 												offset, _ := strconv.Atoi(versionGrp[1])
 												//fmt.Println(regexGroup[0][offset])
@@ -712,30 +736,4 @@ func find(root, ext string) []string {
 		return nil
 	})
 	return a
-}
-
-func TLSGrab(r *http.Response) *cryptoutil.TLSData {
-	if r.TLS != nil {
-		return cryptoutil.TLSGrab(r.TLS)
-	}
-	return nil
-}
-func (r *Response) GetHeader(name string) string {
-	v, ok := r.Headers[name]
-	if ok {
-		return strings.Join(v, " ")
-	}
-
-	return ""
-}
-
-// GetHeaderPart with offset
-func (r *Response) GetHeaderPart(name, sep string) string {
-	v, ok := r.Headers[name]
-	if ok && len(v) > 0 {
-		tokens := strings.Split(strings.Join(v, " "), sep)
-		return tokens[0]
-	}
-
-	return ""
 }
