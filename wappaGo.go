@@ -121,9 +121,9 @@ func main() {
 	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
 	//urls, _ := reader.ReadString('\n')
 
-	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
-	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", true), chromedp.Flag("disable-gpu", true), chromedp.Flag("disable-webgl", true), chromedp.Flag("disable-popup-blocking", true))...)
-	defer cancel()
+	ctxAlloc, cancelCTX := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
+	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", true), chromedp.Flag("disable-gpu", true), chromedp.Flag("disable-webgl", true), chromedp.Flag("disable-popup-blocking", true))...)
+	defer cancelCTX()
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
 	//ctxAlloc1, cancel := chromedp.NewContext(context.Background())
 	defer cancel()
