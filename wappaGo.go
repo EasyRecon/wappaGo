@@ -199,7 +199,7 @@ func main() {
 
 func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string) {
 
-	cloneCTX, _ := chromedp.NewContext(ctxAlloc1)
+	cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
 	chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
 			//fmt.Println("closing alert:", ev.Message)
@@ -212,7 +212,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 			}()
 		}
 	})
-	//	defer cancel()
+	defer cancel()
 	hote := Host{}
 	hote.CDN = CdnName
 	hote.Data = urlData
