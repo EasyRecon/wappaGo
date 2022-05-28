@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"io/ioutil"
 	"log"
@@ -17,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/dom"
@@ -28,6 +31,7 @@ import (
 	"github.com/projectdiscovery/cdncheck"
 	"github.com/projectdiscovery/cryptoutil"
 	"github.com/projectdiscovery/fastdialer/fastdialer"
+	pdhttputil "github.com/projectdiscovery/httputil"
 	"github.com/remeh/sizedwaitgroup"
 )
 
@@ -44,10 +48,9 @@ type Host struct {
 	Path           string        `json:"path"`
 	Location       string        `json:"location,omitempty"`
 	Title          string        `json:"title"`
-	Host           string        `json:"host"`
 	Scheme         string        `json:"scheme"`
 	Data           string        `json:"data"`
-	Response_time  string        `json:"response_time"`
+	Response_time  time.Duration `json:"response_time"`
 	Screenshot     string        `json:"screenshot_name,omitempty"`
 	Technologies   []Technologie `json:"technologies"`
 	Content_length int           `json:"content_length`
@@ -55,6 +58,10 @@ type Host struct {
 	IP             string        `json:"ip`
 	Cname          []string      `json:"cname,omitempty"`
 	CDN            string        `json:"cdn,omitempty"`
+}
+type Data struct {
+	Url   string `json:"url"`
+	Infos Host   `json:"infos"`
 }
 type Options struct {
 	Screenshot  *string
@@ -121,9 +128,9 @@ func main() {
 	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
 	//urls, _ := reader.ReadString('\n')
 
-	ctxAlloc, cancelCTX := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
-	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", true), chromedp.Flag("disable-gpu", true), chromedp.Flag("disable-webgl", true), chromedp.Flag("disable-popup-blocking", true))...)
-	defer cancelCTX()
+	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
+	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", true), chromedp.Flag("disable-gpu", true), chromedp.Flag("disable-webgl", true), chromedp.Flag("disable-popup-blocking", true))...)
+	defer cancel()
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
 	//ctxAlloc1, cancel := chromedp.NewContext(context.Background())
 	defer cancel()
@@ -150,6 +157,7 @@ func main() {
 			client := &http.Client{
 				Timeout: 3 * time.Second,
 				Transport: &http.Transport{
+					MaxIdleConnsPerHost: -1,
 					TLSClientConfig: &tls.Config{
 						InsecureSkipVerify: true,
 					},
@@ -213,20 +221,19 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		}
 	})
 	defer cancel()
-	hote := Host{}
-	hote.CDN = CdnName
-	hote.Data = urlData
-	hote.Ports = portOpen
+	data := Data{}
+	data.Infos.CDN = CdnName
+	data.Infos.Data = urlData
+	data.Infos.Ports = portOpen
 	errorContinue := true
 
 	//u, err := url.Parse(urlData)
-	var resp *http.Response
-	var errPlain error
-	var errSSL error
-	urlDataPort := urlData + ":" + port
+	var resp *Response
 
+	urlDataPort := urlData + ":" + port
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{
-		Timeout: 3 * time.Second,
+		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
@@ -235,63 +242,55 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 			DisableKeepAlives: true,
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			hote.Location = fmt.Sprintf("%s", req.URL)
-			return nil
+			//data.Infos.Location = fmt.Sprintf("%s", req.URL)
+
+			return http.ErrUseLastResponse
+
 		},
 	}
 
-	resp, errSSL = client.Get("https://" + urlDataPort)
+	var TempResp Response
+	//resp, errSSL = client.Get("https://" + urlDataPort)
+	request, _ := http.NewRequest("GET", "https://"+urlDataPort, nil)
+	resp, errSSL := Do(request, client)
 	if errSSL != nil {
-		resp, errPlain = client.Get("http://" + urlDataPort)
+		request, _ := http.NewRequest("GET", "http://"+urlDataPort, nil)
+		resp, errPlain := Do(request, client)
+		data, TempResp, _ = DefineBasicMetric(data, resp)
 		if errPlain != nil {
-			if errPlain == http.ErrUseLastResponse {
 
-				if (resp.StatusCode == 301 || resp.StatusCode == 302) && len(resp.Header["Location"]) > 0 {
-					hote.Location = resp.Header["Location"][0]
-				}
-			}
 			errorContinue = false
 		} else {
-			if hote.Scheme == "" {
-				hote.Scheme = "http"
-			}
 
-			urlData = "http://" + urlDataPort
-			hote.Host = urlData
-		}
-	} else {
-		if errSSL == http.ErrUseLastResponse {
-			if (resp.StatusCode == 301 || resp.StatusCode == 302) && len(resp.Header["Location"]) > 0 {
-				hote.Location = resp.Header["Location"][0]
+			if data.Infos.Scheme == "" {
+				data.Infos.Scheme = "http"
 			}
+			urlData = "http://" + urlDataPort
+			data.Url = urlData
 		}
-		if hote.Scheme == "" {
-			hote.Scheme = "https"
+
+	} else {
+		data, TempResp, _ = DefineBasicMetric(data, resp)
+		if data.Infos.Scheme == "" {
+			data.Infos.Scheme = "https"
 		}
 		urlData = "https://" + urlData
-		hote.Host = urlData
+		data.Url = urlData
 	}
-	ip := dialer.GetDialedIP(hote.Data)
-	hote.IP = ip
+	ip := dialer.GetDialedIP(data.Infos.Data)
+	data.Infos.IP = ip
 	dnsData, err := dialer.GetDNSData(urlData)
 	if dnsData != nil && err == nil {
-		hote.Cname = dnsData.CNAME
+		data.Infos.Cname = dnsData.CNAME
 	}
 
 	if errorContinue {
-		if hote.Location != "" {
-			urlData = hote.Location
-		}
-		body, _ := ioutil.ReadAll(resp.Body)
-		//fmt.Println(fmt.Sprintf("%s", body))
-		hote.Content_length = len(body)
-		if len(resp.Header["Content-Type"]) > 0 {
-
-			hote.Content_type = strings.Split(resp.Header["Content-Type"][0], ";")[0]
+		if data.Infos.Location != "" {
+			urlData = data.Infos.Location
 		}
 
-		hote.Status_code = resp.StatusCode
-		doc, err := goquery.NewDocumentFromReader(resp.Body)
+		reader := bytes.NewReader(TempResp.Data)
+		doc, err := goquery.NewDocumentFromReader(reader)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -310,15 +309,15 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 
 		err = chromedp.Run(cloneCTX,
 			chromedp.Navigate(urlData),
-			chromedp.Title(&hote.Title),
+			chromedp.Title(&data.Infos.Title),
 			chromedp.FullScreenshot(&buf, 100),
 			chromedp.ActionFunc(func(ctx context.Context) error {
-				hote.Technologies = analyze(resultGlobal, resp, srcList, ctx, hote)
+				data.Infos.Technologies = analyze(resultGlobal, TempResp, srcList, ctx, data.Infos)
 
 				return nil
 			}),
 		)
-		hote.Technologies = dedupTechno(hote.Technologies)
+		data.Infos.Technologies = dedupTechno(data.Infos.Technologies)
 		if screen != "" && len(buf) > 0 {
 			imgTitle := strings.Replace(urlData, ":", "_", -1)
 			imgTitle = strings.Replace(imgTitle, "/", "", -1)
@@ -331,11 +330,11 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 			)
 			file.Write(buf)
 			file.Close()
-			hote.Screenshot = screen + "/" + imgTitle + ".png"
+			data.Infos.Screenshot = screen + "/" + imgTitle + ".png"
 		}
 
 	}
-	b, err := json.Marshal(hote)
+	b, err := json.Marshal(data)
 
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -363,7 +362,7 @@ func dedupTechno(technologies []Technologie) []Technologie {
 	return output
 }
 
-func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList []string, ctx context.Context, hote Host) []Technologie {
+func analyze(resultGlobal map[string]interface{}, resp Response, srcList []string, ctx context.Context, hote Host) []Technologie {
 	node, _ := dom.GetDocument().Do(ctx)
 	body, _ := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
 
@@ -427,13 +426,13 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 				if key == "headers" {
 					for header, _ := range resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{}) {
 						//fmt.Println(header, "---------------------", resp.Header)
-						for headerName, _ := range resp.Header {
+						for headerName, _ := range resp.Headers {
 							if strings.ToLower(header) == strings.ToLower(headerName) {
 								//headerValue := resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[header]
 								if resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[headerName] != "" {
 									regex := strings.Split(fmt.Sprintf("%v", resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[headerName]), "\\;")
 
-									findregex, _ := regexp.MatchString("(?i)"+regex[0], resp.Header[headerName][0])
+									findregex, _ := regexp.MatchString("(?i)"+regex[0], resp.Headers[headerName][0])
 									//fmt.Println(findregex, technoName, headerName, resp.Header[headerName][0])
 									if findregex == true {
 										//fmt.Println(technoName)
@@ -443,7 +442,7 @@ func analyze(resultGlobal map[string]interface{}, resp *http.Response, srcList [
 											technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 										}
 										compiledregex := regexp.MustCompile("(?i)" + regex[0])
-										regexGroup := compiledregex.FindAllStringSubmatch(resp.Header[headerName][0], -1)
+										regexGroup := compiledregex.FindAllStringSubmatch(resp.Headers[headerName][0], -1)
 
 										if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
 											versionGrp := strings.Split(regex[1], "\\")
@@ -736,4 +735,97 @@ func find(root, ext string) []string {
 		return nil
 	})
 	return a
+}
+
+// Do http request
+func Do(req *http.Request, client *http.Client) (*Response, error) {
+	timeStart := time.Now()
+
+	var gzipRetry bool
+get_response:
+	httpresp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var shouldIgnoreErrors, shouldIgnoreBodyErrors bool
+
+	var resp Response
+
+	resp.Headers = httpresp.Header.Clone()
+
+	// httputil.DumpResponse does not handle websockets
+	headers, rawResp, err := pdhttputil.DumpResponseHeadersAndRaw(httpresp)
+	if err != nil {
+		// Edge case - some servers respond with gzip encoding header but uncompressed body, in this case the standard library configures the reader as gzip, triggering an error when read.
+		// The bytes slice is not accessible because of abstraction, therefore we need to perform the request again tampering the Accept-Encoding header
+		if !gzipRetry && strings.Contains(err.Error(), "gzip: invalid header") {
+			gzipRetry = true
+			req.Header.Set("Accept-Encoding", "identity")
+			goto get_response
+		}
+		if !shouldIgnoreErrors {
+			return nil, err
+		}
+	}
+	resp.Raw = string(rawResp)
+	resp.RawHeaders = string(headers)
+
+	var respbody []byte
+	// websockets don't have a readable body
+	if httpresp.StatusCode != http.StatusSwitchingProtocols {
+		var err error
+		respbody, err = ioutil.ReadAll(io.LimitReader(httpresp.Body, 4096))
+		if err != nil && !shouldIgnoreBodyErrors {
+			return nil, err
+		}
+	}
+
+	closeErr := httpresp.Body.Close()
+	if closeErr != nil && !shouldIgnoreBodyErrors {
+		return nil, closeErr
+	}
+
+	respbodystr := string(respbody)
+
+	// if content length is not defined
+	if resp.ContentLength <= 0 {
+		// check if it's in the header and convert to int
+		if contentLength, ok := resp.Headers["Content-Length"]; ok {
+			contentLengthInt, _ := strconv.Atoi(strings.Join(contentLength, ""))
+			resp.ContentLength = contentLengthInt
+		}
+
+		// if we have a body, then use the number of bytes in the body if the length is still zero
+		if resp.ContentLength <= 0 && len(respbodystr) > 0 {
+			resp.ContentLength = utf8.RuneCountInString(respbodystr)
+		}
+	}
+
+	resp.Data = respbody
+
+	// fill metrics
+	resp.StatusCode = httpresp.StatusCode
+	// number of words
+	resp.Words = len(strings.Split(respbodystr, " "))
+	// number of lines
+	resp.Lines = len(strings.Split(respbodystr, "\n"))
+
+	resp.Duration = time.Since(timeStart)
+
+	return &resp, nil
+}
+
+func DefineBasicMetric(data Data, resp *Response) (Data, Response, error) {
+
+	if (resp.StatusCode == 301 || resp.StatusCode == 302) && len(resp.Headers["Location"]) > 0 {
+		data.Infos.Location = resp.Headers["Location"][0]
+	}
+	if len(resp.Headers["Content-Type"]) > 0 {
+		data.Infos.Content_type = strings.Split(resp.Headers["Content-Type"][0], ";")[0]
+	}
+	data.Infos.Response_time = resp.Duration
+	data.Infos.Content_length = resp.ContentLength
+	data.Infos.Status_code = resp.StatusCode
+	return data, *resp, nil
 }

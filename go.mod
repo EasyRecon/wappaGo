@@ -32,9 +32,11 @@ require (
 	github.com/projectdiscovery/cdncheck v0.0.3 // indirect
 	github.com/projectdiscovery/fastdialer v0.0.15 // indirect
 	github.com/projectdiscovery/hmap v0.0.2-0.20210917080408-0fd7bd286bfa // indirect
+	github.com/projectdiscovery/httputil v0.0.0-20210913064028-815c8db933ff // indirect
 	github.com/projectdiscovery/iputil v0.0.0-20210804143329-3a30fcde43f3 // indirect
 	github.com/projectdiscovery/mapcidr v0.0.8 // indirect
 	github.com/projectdiscovery/networkpolicy v0.0.1 // indirect
+	github.com/projectdiscovery/rawhttp v0.0.8 // indirect
 	github.com/projectdiscovery/retryabledns v1.0.13-0.20210916165024-76c5b76fd59a // indirect
 	github.com/projectdiscovery/retryablehttp-go v1.0.2 // indirect
 	github.com/projectdiscovery/stringsutil v0.0.0-20210830151154-f567170afdd9 // indirect
@@ -46,7 +48,7 @@ require (
 	github.com/zmap/zcrypto v0.0.0-20211005224000-2d0ffdec8a9b // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	golang.org/x/crypto v0.0.0-20201124201722-c8d3bf9c5392 // indirect
-	golang.org/x/net v0.0.0-20210916014120-12bc252f5db8 // indirect
+	golang.org/x/net v0.0.0-20211216030914-fe4d6282115f // indirect
 	golang.org/x/sys v0.0.0-20220422013727-9388b58f7150 // indirect
 	golang.org/x/text v0.3.7 // indirect
 )
