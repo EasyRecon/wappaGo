@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
@@ -207,20 +208,6 @@ func main() {
 
 func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string) {
 
-	cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
-	chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
-		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
-			//fmt.Println("closing alert:", ev.Message)
-			go func() {
-				if err := chromedp.Run(cloneCTX,
-					page.HandleJavaScriptDialog(true),
-				); err != nil {
-					panic(err)
-				}
-			}()
-		}
-	})
-	defer cancel()
 	data := Data{}
 	data.Infos.CDN = CdnName
 	data.Infos.Data = urlData
@@ -256,12 +243,11 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	if errSSL != nil {
 		request, _ := http.NewRequest("GET", "http://"+urlDataPort, nil)
 		resp, errPlain := Do(request, client)
-		data, TempResp, _ = DefineBasicMetric(data, resp)
-		if errPlain != nil {
+		if errPlain != nil || resp == nil {
 
 			errorContinue = false
 		} else {
-
+			data, TempResp, _ = DefineBasicMetric(data, resp)
 			if data.Infos.Scheme == "" {
 				data.Infos.Scheme = "http"
 			}
@@ -302,17 +288,33 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 				srcList = append(srcList, srcLink)
 			}
 		})
-
+		cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
+		chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
+			if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
+				//fmt.Println("closing alert:", ev.Message)
+				go func() {
+					if err := chromedp.Run(cloneCTX,
+						page.HandleJavaScriptDialog(true),
+					); err != nil {
+						panic(err)
+					}
+				}()
+			}
+		})
+		defer cancel()
 		// run task list
 		//var res []string
 		var buf []byte
-
 		err = chromedp.Run(cloneCTX,
 			chromedp.Navigate(urlData),
 			chromedp.Title(&data.Infos.Title),
 			chromedp.FullScreenshot(&buf, 100),
 			chromedp.ActionFunc(func(ctx context.Context) error {
-				data.Infos.Technologies = analyze(resultGlobal, TempResp, srcList, ctx, data.Infos)
+
+				cookiesList, _ := network.GetCookies().Do(ctx)
+				node, _ := dom.GetDocument().Do(ctx)
+				body, _ := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
+				data.Infos.Technologies = analyze(resultGlobal, TempResp, srcList, ctx, data.Infos, cookiesList, node, body)
 
 				return nil
 			}),
@@ -332,14 +334,13 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 			file.Close()
 			data.Infos.Screenshot = screen + "/" + imgTitle + ".png"
 		}
+		b, err := json.Marshal(data)
 
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
+		fmt.Println(string(b))
 	}
-	b, err := json.Marshal(data)
-
-	if err != nil {
-		fmt.Println("Error:", err)
-	}
-	fmt.Println(string(b))
 }
 func dedupTechno(technologies []Technologie) []Technologie {
 	var output []Technologie
@@ -362,10 +363,9 @@ func dedupTechno(technologies []Technologie) []Technologie {
 	return output
 }
 
-func analyze(resultGlobal map[string]interface{}, resp Response, srcList []string, ctx context.Context, hote Host) []Technologie {
-	node, _ := dom.GetDocument().Do(ctx)
-	body, _ := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
+func analyze(resultGlobal map[string]interface{}, resp Response, srcList []string, ctx context.Context, hote Host, cookiesList []*network.Cookie, node *cdp.Node, body string) []Technologie {
 
+	var technologies []Technologie
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(body))
 	//hote := Host{}
 	for technoName, _ := range resultGlobal {
@@ -385,7 +385,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 							}
 							if res != nil && res != false {
 								//fmt.Println(js, regex)
-								technoTemp := &Technologie{}
+								technoTemp := Technologie{}
 								technoTemp.Name = technoName
 								if (len(regex) > 1 && strings.HasPrefix(regex[1], "confidence")) || (len(regex) > 2 && strings.HasPrefix(regex[2], "confidence")) {
 									if len(regex) > 1 && strings.HasPrefix(regex[1], "confidence") {
@@ -403,7 +403,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 										technoTemp.Version = fmt.Sprintf("%v", res)
 									}
 								}
-								hote.Technologies = append(hote.Technologies, *technoTemp)
+								technologies = append(technologies, technoTemp)
 							}
 
 						} else { // just check if existe
@@ -415,7 +415,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 								if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 									technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 								}
-								hote.Technologies = append(hote.Technologies, technoTemp)
+								technologies = append(technologies, technoTemp)
 
 							}
 
@@ -436,7 +436,8 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 									//fmt.Println(findregex, technoName, headerName, resp.Header[headerName][0])
 									if findregex == true {
 										//fmt.Println(technoName)
-										technoTemp := &Technologie{}
+										technoTemp := Technologie{}
+
 										technoTemp.Name = technoName
 										if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 											technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
@@ -452,15 +453,15 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 												technoTemp.Version = regexGroup[0][offset]
 											}
 										}
-										hote.Technologies = append(hote.Technologies, *technoTemp)
+										technologies = append(technologies, technoTemp)
 									}
 								} else {
-									technoTemp := &Technologie{}
+									technoTemp := Technologie{}
 									technoTemp.Name = technoName
 									if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 										technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 									}
-									hote.Technologies = append(hote.Technologies, *technoTemp)
+									technologies = append(technologies, technoTemp)
 								}
 							}
 						}
@@ -468,19 +469,19 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 					}
 				}
 				if key == "cookies" {
-					cookiesList, _ := network.GetAllCookies().Do(ctx)
 
 					for cookieTechno, _ := range resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{}) {
 						//fmt.Println(cookieTechno, cookiesList)
 						if len(cookiesList) > 0 {
 							for _, cookie := range cookiesList {
+
 								if cookieTechno == cookie.Name {
-									technoTemp := &Technologie{}
+									technoTemp := Technologie{}
 									technoTemp.Name = technoName
 									if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 										technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 									}
-									hote.Technologies = append(hote.Technologies, *technoTemp)
+									technologies = append(technologies, technoTemp)
 								}
 							}
 						}
@@ -492,12 +493,12 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 						if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "string" {
 							findRegex, _ := regexp.MatchString("(?i)"+resultGlobal[technoName].(map[string]interface{})[key].(string), scriptCrc)
 							if findRegex {
-								technoTemp := &Technologie{}
+								technoTemp := Technologie{}
 								technoTemp.Name = technoName
 								if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 									technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 								}
-								hote.Technologies = append(hote.Technologies, *technoTemp)
+								technologies = append(technologies, technoTemp)
 							}
 						} else {
 
@@ -505,12 +506,12 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 
 								findRegex, _ := regexp.MatchString("(?i)"+scriptSrcArray.(string), scriptCrc)
 								if findRegex {
-									technoTemp := &Technologie{}
+									technoTemp := Technologie{}
 									technoTemp.Name = technoName
 									if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 										technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 									}
-									hote.Technologies = append(hote.Technologies, *technoTemp)
+									technologies = append(technologies, technoTemp)
 								}
 							}
 						}
@@ -518,23 +519,22 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 					}
 				}
 				if key == "url" {
-
 					if hote.Location != "" {
 						if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "string" {
 							regex := resultGlobal[technoName].(map[string]interface{})[key].(string)
 							findregex, _ := regexp.MatchString("(?i)"+regex, hote.Location)
 							if findregex == true {
-								technoTemp := &Technologie{}
+								technoTemp := Technologie{}
 								technoTemp.Name = technoName
-								hote.Technologies = append(hote.Technologies, *technoTemp)
+								technologies = append(technologies, technoTemp)
 							}
 						} else {
 							for _, url := range resultGlobal[technoName].(map[string]interface{})[key].([]interface{}) {
 								findregex, _ := regexp.MatchString("(?i)"+url.(string), hote.Location)
 								if findregex == true {
-									technoTemp := &Technologie{}
+									technoTemp := Technologie{}
 									technoTemp.Name = technoName
-									hote.Technologies = append(hote.Technologies, *technoTemp)
+									technologies = append(technologies, technoTemp)
 								}
 							}
 						}
@@ -551,7 +551,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 						//fmt.Println(findregex, technoName, headerName, resp.Header[headerName][0])
 						if findregex == true {
 							//fmt.Println(technoName)
-							technoTemp := &Technologie{}
+							technoTemp := Technologie{}
 							technoTemp.Name = technoName
 							if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 								technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
@@ -568,7 +568,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 									technoTemp.Version = regexGroup[0][offset]
 								}
 							}
-							hote.Technologies = append(hote.Technologies, *technoTemp)
+							technologies = append(technologies, technoTemp)
 						}
 					} else {
 						for _, htmlRegex := range resultGlobal[technoName].(map[string]interface{})[key].([]interface{}) {
@@ -578,7 +578,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 							//fmt.Println(findregex, technoName, headerName, resp.Header[headerName][0])
 							if findregex == true {
 								//fmt.Println(technoName)
-								technoTemp := &Technologie{}
+								technoTemp := Technologie{}
 								technoTemp.Name = technoName
 								if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 									technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
@@ -595,7 +595,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 										technoTemp.Version = regexGroup[0][offset]
 									}
 								}
-								hote.Technologies = append(hote.Technologies, *technoTemp)
+								technologies = append(technologies, technoTemp)
 							}
 						}
 					}
@@ -612,7 +612,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 								//fmt.Println(findregex, metaKey, metaProperties, technoName)
 								if findregex == true {
 									//fmt.Println(technoName)
-									technoTemp := &Technologie{}
+									technoTemp := Technologie{}
 									technoTemp.Name = technoName
 									if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 										technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
@@ -629,7 +629,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 											technoTemp.Version = regexGroup[0][offset]
 										}
 									}
-									hote.Technologies = append(hote.Technologies, *technoTemp)
+									technologies = append(technologies, technoTemp)
 								}
 
 							} else {
@@ -640,7 +640,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 									//fmt.Println(findregex, metaKey, metaPropertiess, technoName)
 									if findregex == true {
 										//fmt.Println(technoName)
-										technoTemp := &Technologie{}
+										technoTemp := Technologie{}
 										technoTemp.Name = technoName
 										if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
 											technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
@@ -657,7 +657,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 												technoTemp.Version = regexGroup[0][offset]
 											}
 										}
-										hote.Technologies = append(hote.Technologies, *technoTemp)
+										technologies = append(technologies, technoTemp)
 									}
 								}
 							}
@@ -668,7 +668,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 			}
 		}
 	}
-	return hote.Technologies
+	return technologies
 }
 func scanPort(protocol, hostname string, port string, portTimeout int) bool {
 	address := hostname + ":" + port
@@ -748,8 +748,6 @@ get_response:
 		return nil, err
 	}
 
-	var shouldIgnoreErrors, shouldIgnoreBodyErrors bool
-
 	var resp Response
 
 	resp.Headers = httpresp.Header.Clone()
@@ -764,9 +762,9 @@ get_response:
 			req.Header.Set("Accept-Encoding", "identity")
 			goto get_response
 		}
-		if !shouldIgnoreErrors {
-			return nil, err
-		}
+
+		return nil, err
+
 	}
 	resp.Raw = string(rawResp)
 	resp.RawHeaders = string(headers)
@@ -776,13 +774,14 @@ get_response:
 	if httpresp.StatusCode != http.StatusSwitchingProtocols {
 		var err error
 		respbody, err = ioutil.ReadAll(io.LimitReader(httpresp.Body, 4096))
-		if err != nil && !shouldIgnoreBodyErrors {
+		if err != nil {
+
 			return nil, err
 		}
 	}
 
 	closeErr := httpresp.Body.Close()
-	if closeErr != nil && !shouldIgnoreBodyErrors {
+	if closeErr != nil {
 		return nil, closeErr
 	}
 
