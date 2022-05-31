@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"flag"
@@ -90,6 +89,13 @@ type Response struct {
 
 var interrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url"}
 
+/*
+missing detection:
+-dns
+-text
+
+
+*/
 func main() {
 	options := Options{}
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
@@ -275,19 +281,6 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 			urlData = data.Infos.Location
 		}
 
-		reader := bytes.NewReader(TempResp.Data)
-		doc, err := goquery.NewDocumentFromReader(reader)
-		if err != nil {
-			log.Fatal(err)
-		}
-		var srcList []string
-		doc.Find("script").Each(func(i int, s *goquery.Selection) {
-			srcLink, exist := s.Attr("src")
-			if exist {
-				//fmt.Println(srcList, srcLink)
-				srcList = append(srcList, srcLink)
-			}
-		})
 		cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
 		chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 			if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
@@ -314,6 +307,23 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 				cookiesList, _ := network.GetCookies().Do(ctx)
 				node, _ := dom.GetDocument().Do(ctx)
 				body, _ := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
+
+				reader := strings.NewReader(body)
+				doc, err := goquery.NewDocumentFromReader(reader)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+				var srcList []string
+				doc.Find("script").Each(func(i int, s *goquery.Selection) {
+					srcLink, exist := s.Attr("src")
+
+					if exist {
+
+						//fmt.Println(srcList, srcLink)
+						srcList = append(srcList, srcLink)
+					}
+				})
 				data.Infos.Technologies = analyze(resultGlobal, TempResp, srcList, ctx, data.Infos, cookiesList, node, body)
 
 				return nil
@@ -378,9 +388,9 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 							regex := strings.Split(fmt.Sprintf("%v", resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[js]), "\\;")
 							var res interface{}
 							if regex[0] != "" {
-								chromedp.Evaluate("return "+js+".match(/"+regex[0]+"/gm)[0]", &res)
+								chromedp.Evaluate("return "+js+".match(/"+regex[0]+"/gm)[0]", &res).Do(ctx)
 							} else {
-								chromedp.Evaluate("return (typeof "+js+" !== 'undefined' ? true : false)", &res)
+								chromedp.Evaluate("return (typeof "+js+" !== 'undefined' ? true : false)", &res).Do(ctx)
 
 							}
 							if res != nil && res != false {
@@ -404,11 +414,12 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 									}
 								}
 								technologies = append(technologies, technoTemp)
+								technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 							}
 
 						} else { // just check if existe
-							res := false
-							chromedp.Evaluate("return (typeof "+js+" !== 'undefined' ? true : false)", &res)
+							var res interface{}
+							chromedp.Evaluate("return (typeof "+js+" !== 'undefined' ? true : false)", &res).Do(ctx)
 							if res == true {
 								technoTemp := Technologie{}
 								technoTemp.Name = technoName
@@ -416,6 +427,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 									technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 								}
 								technologies = append(technologies, technoTemp)
+								technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 
 							}
 
@@ -454,6 +466,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 											}
 										}
 										technologies = append(technologies, technoTemp)
+										technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 									}
 								} else {
 									technoTemp := Technologie{}
@@ -462,10 +475,131 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 										technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 									}
 									technologies = append(technologies, technoTemp)
+									technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 								}
 							}
 						}
 
+					}
+				}
+				if key == "dom" {
+
+					if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "string" {
+						doc.Find(resultGlobal[technoName].(map[string]interface{})[key].(string)).Each(func(i int, s *goquery.Selection) {
+							technoTemp := Technologie{}
+							technoTemp.Name = technoName
+							if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+								technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+							}
+							technologies = append(technologies, technoTemp)
+							technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
+						})
+
+					} else if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "map[string]interface {}" {
+
+						for domKey, domArray := range resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{}) {
+
+							for domKeyElement, domElement := range domArray.(map[string]interface{}) {
+								if fmt.Sprintf("%T", domElement) == "string" {
+									doc.Find(domKey).Each(func(i int, s *goquery.Selection) {
+										if domElement == "" {
+											technoTemp := Technologie{}
+											technoTemp.Name = technoName
+											if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+												technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+											}
+											technologies = append(technologies, technoTemp)
+											technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
+										} else {
+											regex := strings.Split(domElement.(string), "\\;")
+
+											findregex, _ := regexp.MatchString("(?i)"+regex[0], body)
+											if findregex {
+												//fmt.Println(technoName)
+												technoTemp := Technologie{}
+												technoTemp.Name = technoName
+												if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+													technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+												}
+												compiledregex := regexp.MustCompile("(?i)" + regex[0])
+												regexGroup := compiledregex.FindAllStringSubmatch(body, -1)
+
+												if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
+													versionGrp := strings.Split(regex[1], "\\")
+
+													if len(versionGrp) > 1 {
+														offset, _ := strconv.Atoi(versionGrp[1])
+														//fmt.Println(regexGroup[0][offset])
+														technoTemp.Version = regexGroup[0][offset]
+													}
+												}
+												technologies = append(technologies, technoTemp)
+												technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
+											}
+										}
+									})
+
+								} else if fmt.Sprintf("%T", domElement) == "map[string]interface {}" {
+									for domKeyElement2, domElement2 := range domElement.(map[string]interface{}) {
+										//fmt.Println(domKey, domKeyElement, domKeyElement2, domElement2, "------")
+										if domKeyElement == "attributes" {
+											doc.Find(domKey).Each(func(i int, s *goquery.Selection) {
+												dommAttr, _ := s.Attr(domElement2.(string))
+												if dommAttr != "" {
+													if domKeyElement2 != "" {
+														findRegex, _ := regexp.MatchString("(?i)"+domKeyElement2, dommAttr)
+														if findRegex {
+															technoTemp := Technologie{}
+															technoTemp.Name = technoName
+															if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+																technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+															}
+															technologies = append(technologies, technoTemp)
+															technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
+														}
+													} else {
+														technoTemp := Technologie{}
+														technoTemp.Name = technoName
+														if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+															technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+														}
+														technologies = append(technologies, technoTemp)
+														technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
+													}
+												}
+
+											})
+										} else {
+											var res interface{}
+											chromedp.Evaluate("(()=>{a=false;document.querySelectorAll('"+domKey+"').forEach(element=>{if(element."+domKeyElement2+"!=undefined){a=true}});return a})()", &res).Do(ctx)
+											//fmt.Println(res, "(()=>{a=false;document.querySelectorAll('"+domKey+"').forEach(element=>{if(element."+domKeyElement2+"!=undefined){a=true}});return a})()")
+											if res == true {
+												technoTemp := Technologie{}
+												technoTemp.Name = technoName
+												if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+													technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+												}
+												technologies = append(technologies, technoTemp)
+												technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
+											}
+										}
+									}
+								}
+							}
+						}
+
+					} else {
+						for _, domArray := range resultGlobal[technoName].(map[string]interface{})[key].([]interface{}) {
+							doc.Find(domArray.(string)).Each(func(i int, s *goquery.Selection) {
+								technoTemp := Technologie{}
+								technoTemp.Name = technoName
+								if resultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
+									technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
+								}
+								technologies = append(technologies, technoTemp)
+								technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
+							})
+						}
 					}
 				}
 				if key == "cookies" {
@@ -482,6 +616,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 										technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 									}
 									technologies = append(technologies, technoTemp)
+									technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 								}
 							}
 						}
@@ -489,9 +624,12 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 					}
 				}
 				if key == "scriptSrc" {
+
 					for _, scriptCrc := range srcList {
+
 						if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "string" {
 							findRegex, _ := regexp.MatchString("(?i)"+resultGlobal[technoName].(map[string]interface{})[key].(string), scriptCrc)
+
 							if findRegex {
 								technoTemp := Technologie{}
 								technoTemp.Name = technoName
@@ -499,12 +637,14 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 									technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 								}
 								technologies = append(technologies, technoTemp)
+								technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 							}
 						} else {
 
 							for _, scriptSrcArray := range resultGlobal[technoName].(map[string]interface{})[key].([]interface{}) {
 
-								findRegex, _ := regexp.MatchString("(?i)"+scriptSrcArray.(string), scriptCrc)
+								finalRegex := strings.ReplaceAll(scriptSrcArray.(string), "/", "\\/")
+								findRegex, _ := regexp.MatchString("(?i)"+finalRegex, scriptCrc)
 								if findRegex {
 									technoTemp := Technologie{}
 									technoTemp.Name = technoName
@@ -512,6 +652,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 										technoTemp.Cpe = resultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 									}
 									technologies = append(technologies, technoTemp)
+									technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 								}
 							}
 						}
@@ -527,6 +668,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 								technoTemp := Technologie{}
 								technoTemp.Name = technoName
 								technologies = append(technologies, technoTemp)
+								technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 							}
 						} else {
 							for _, url := range resultGlobal[technoName].(map[string]interface{})[key].([]interface{}) {
@@ -535,6 +677,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 									technoTemp := Technologie{}
 									technoTemp.Name = technoName
 									technologies = append(technologies, technoTemp)
+									technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 								}
 							}
 						}
@@ -542,7 +685,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 
 				}
 
-				if key == "html" {
+				if key == "html" || key == "text" {
 					if fmt.Sprintf("%T", resultGlobal[technoName].(map[string]interface{})[key]) == "string" {
 
 						regex := strings.Split(fmt.Sprintf("%v", resultGlobal[technoName].(map[string]interface{})[key]), "\\;")
@@ -569,6 +712,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 								}
 							}
 							technologies = append(technologies, technoTemp)
+							technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 						}
 					} else {
 						for _, htmlRegex := range resultGlobal[technoName].(map[string]interface{})[key].([]interface{}) {
@@ -596,6 +740,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 									}
 								}
 								technologies = append(technologies, technoTemp)
+								technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 							}
 						}
 					}
@@ -630,6 +775,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 										}
 									}
 									technologies = append(technologies, technoTemp)
+									technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 								}
 
 							} else {
@@ -658,6 +804,7 @@ func analyze(resultGlobal map[string]interface{}, resp Response, srcList []strin
 											}
 										}
 										technologies = append(technologies, technoTemp)
+										technologies = checkRequired(technoTemp.Name, resultGlobal, technologies)
 									}
 								}
 							}
@@ -827,4 +974,27 @@ func DefineBasicMetric(data Data, resp *Response) (Data, Response, error) {
 	data.Infos.Content_length = resp.ContentLength
 	data.Infos.Status_code = resp.StatusCode
 	return data, *resp, nil
+}
+
+func checkRequired(technoName string, technoList map[string]interface{}, tech []Technologie) []Technologie {
+	for name, _ := range technoList[technoName].(map[string]interface{}) {
+		if name == "requires" {
+			if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["requires"].(map[string]interface{})) == "string" {
+				technoTemp := Technologie{}
+				technoTemp.Name = technoList[technoName].(map[string]interface{})["requires"].(string)
+				tech = append(tech, technoTemp)
+			} else {
+				for req, _ := range technoList[technoName].(map[string]interface{})["requires"].(map[string]interface{}) {
+					technoTemp := Technologie{}
+					technoTemp.Name = req
+					tech = append(tech, technoTemp)
+				}
+			}
+		}
+	}
+	return tech
+}
+
+func domDetect() {
+
 }
