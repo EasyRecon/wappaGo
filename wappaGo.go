@@ -985,16 +985,23 @@ func DefineBasicMetric(data Data, resp *Response) (Data, Response, error) {
 func checkRequired(technoName string, technoList map[string]interface{}, tech []Technologie) []Technologie {
 	for name, _ := range technoList[technoName].(map[string]interface{}) {
 		if name == "requires" {
-			if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["requires"].(map[string]interface{})) == "string" {
+			if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["requires"]) == "string" {
 				technoTemp := Technologie{}
 				technoTemp.Name = technoList[technoName].(map[string]interface{})["requires"].(string)
 				tech = append(tech, technoTemp)
 			} else {
-				for req, _ := range technoList[technoName].(map[string]interface{})["requires"].(map[string]interface{}) {
+				if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["requires"].(map[string]interface{})) == "string" {
 					technoTemp := Technologie{}
-					technoTemp.Name = req
+					technoTemp.Name = technoList[technoName].(map[string]interface{})["requires"].(string)
 					tech = append(tech, technoTemp)
+				} else {
+					for req, _ := range technoList[technoName].(map[string]interface{})["requires"].(map[string]interface{}) {
+						technoTemp := Technologie{}
+						technoTemp.Name = req
+						tech = append(tech, technoTemp)
+					}
 				}
+
 			}
 		}
 	}
