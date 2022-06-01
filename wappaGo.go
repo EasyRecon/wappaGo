@@ -244,23 +244,29 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 
 	var TempResp Response
 	//resp, errSSL = client.Get("https://" + urlDataPort)
-	request, _ := http.NewRequest("GET", "https://"+urlDataPort, nil)
-	resp, errSSL := Do(request, client)
-	if errSSL != nil {
-		request, _ := http.NewRequest("GET", "http://"+urlDataPort, nil)
-		resp, errPlain := Do(request, client)
-		if errPlain != nil || resp == nil {
-
+	var errSSL error
+	if port != "80" {
+		request, _ := http.NewRequest("GET", "https://"+urlDataPort, nil)
+		resp, errSSL = Do(request, client)
+	}
+	if errSSL != nil || port == "80" {
+		if port == "443" {
 			errorContinue = false
 		} else {
-			data, TempResp, _ = DefineBasicMetric(data, resp)
-			if data.Infos.Scheme == "" {
-				data.Infos.Scheme = "http"
-			}
-			urlData = "http://" + urlDataPort
-			data.Url = urlData
-		}
+			request, _ := http.NewRequest("GET", "http://"+urlDataPort, nil)
+			resp, errPlain := Do(request, client)
+			if errPlain != nil || resp == nil {
 
+				errorContinue = false
+			} else {
+				data, TempResp, _ = DefineBasicMetric(data, resp)
+				if data.Infos.Scheme == "" {
+					data.Infos.Scheme = "http"
+				}
+				urlData = "http://" + urlDataPort
+				data.Url = urlData
+			}
+		}
 	} else {
 		data, TempResp, _ = DefineBasicMetric(data, resp)
 		if data.Infos.Scheme == "" {
