@@ -70,6 +70,7 @@ type Options struct {
 	Porttimeout *int
 	Cdn         *bool
 	Resolvers   *string
+	AmassInput  *bool
 }
 type Response struct {
 	StatusCode    int
@@ -104,6 +105,7 @@ func main() {
 	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
 	options.Cdn = flag.Bool("cdn", true, "Exclude port scanning on cdn")
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
+	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on avec (Amass json output)")
 	flag.Parse()
 
 	if *options.Screenshot != "" {
@@ -150,11 +152,18 @@ func main() {
 	swg := sizedwaitgroup.New(*options.Threads)
 	portList := strings.Split(*options.Ports, ",")
 	cdn, err := cdncheck.NewWithCache()
-
+	var url string
 	for scanner.Scan() {
+		if *options.AmassInput {
+			var result map[string]interface{}
+			json.Unmarshal([]byte(scanner.Text()), &result)
+			url = result["name"].(string)
+		} else {
+			url = scanner.Text()
+		}
+
 		var CdnName string
 		portTemp := portList
-		url := scanner.Text()
 
 		if err != nil {
 			log.Fatal(err)
