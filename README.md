@@ -1,4 +1,4 @@
-Cet outil est créé pour assembler différents outils comme https, naabu, gowitness et ajouter une détection de la technologie headless de chrome à la place de httpx.
+This tool is created to assemble different tools like https, naabu, gowitness and add a detection of the headless technology of chrome instead of httpx.
 
 ### Why
 
@@ -7,7 +7,8 @@ Because many tools need a chrome headless session. If you use several tools, for
 
 ## Todo
 
-dependcy technologies
+increase speed
+code refacto
 
 
 ## Thank's

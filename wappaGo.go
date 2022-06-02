@@ -107,9 +107,9 @@ func main() {
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
 	options.Threads = flag.Int("threads", 10, "Number of threads in same time")
 	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
-	options.Cdn = flag.Bool("cdn", true, "Exclude port scanning on cdn")
+	options.Cdn = flag.Bool("cdn", false, "Exclude port scanning on cdn")
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
-	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on avec (Amass json output)")
+	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
 	flag.Parse()
 
 	if *options.Screenshot != "" {
@@ -166,6 +166,7 @@ func main() {
 			var result map[string]interface{}
 			json.Unmarshal([]byte(scanner.Text()), &result)
 			url = result["name"].(string)
+
 		} else {
 			url = scanner.Text()
 		}
@@ -238,9 +239,13 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	errorContinue := true
 
 	//u, err := url.Parse(urlData)
+	var urlDataPort string
 	var resp *Response
-
-	urlDataPort := urlData + ":" + port
+	if port != "80" && port != "443" {
+		urlDataPort = urlData + ":" + port
+	} else {
+		urlDataPort = urlData
+	}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -289,7 +294,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		if data.Infos.Scheme == "" {
 			data.Infos.Scheme = "https"
 		}
-		urlData = "https://" + urlData
+		urlData = "https://" + urlDataPort
 		data.Url = urlData
 	}
 	ip := dialer.GetDialedIP(data.Infos.Data)

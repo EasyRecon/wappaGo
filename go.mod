@@ -29,10 +29,10 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/projectdiscovery/blackrock v0.0.0-20210415162320-b38689ae3a2e // indirect
-	github.com/projectdiscovery/cdncheck v0.0.3 // indirect
-	github.com/projectdiscovery/fastdialer v0.0.15 // indirect
+	github.com/projectdiscovery/cdncheck v0.0.3
+	github.com/projectdiscovery/fastdialer v0.0.15
 	github.com/projectdiscovery/hmap v0.0.2-0.20210917080408-0fd7bd286bfa // indirect
-	github.com/projectdiscovery/httputil v0.0.0-20210913064028-815c8db933ff // indirect
+	github.com/projectdiscovery/httputil v0.0.0-20210913064028-815c8db933ff
 	github.com/projectdiscovery/iputil v0.0.0-20210804143329-3a30fcde43f3 // indirect
 	github.com/projectdiscovery/mapcidr v0.0.8 // indirect
 	github.com/projectdiscovery/networkpolicy v0.0.1 // indirect
