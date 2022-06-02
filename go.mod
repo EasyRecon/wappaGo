@@ -3,6 +3,7 @@ module github.com/EasyRecon/wappaGo
 go 1.18
 
 require (
+	github.com/EasyRecon/wappaGo/lib v0.0.0-00010101000000-000000000000
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/chromedp/cdproto v0.0.0-20220515234810-83d799542a04
 	github.com/chromedp/chromedp v0.8.1
@@ -11,6 +12,21 @@ require (
 	github.com/projectdiscovery/cryptoutil v1.0.0
 	github.com/remeh/sizedwaitgroup v1.0.0
 )
+
+require github.com/EasyRecon/wappaGo/analyze v0.0.0-00010101000000-000000000000
+
+require (
+	github.com/EasyRecon/wappaGo/structure v0.0.0-00010101000000-000000000000 // indirect
+	github.com/EasyRecon/wappaGo/technologies v0.0.0-00010101000000-000000000000 // indirect
+)
+
+replace github.com/EasyRecon/wappaGo/analyze => ./analyze
+
+replace github.com/EasyRecon/wappaGo/structure => ./structure
+
+replace github.com/EasyRecon/wappaGo/technologies => ./technologies
+
+replace github.com/EasyRecon/wappaGo/lib => ./lib
 
 require (
 	github.com/akrylysov/pogreb v0.10.1 // indirect
@@ -36,7 +52,6 @@ require (
 	github.com/projectdiscovery/iputil v0.0.0-20210804143329-3a30fcde43f3 // indirect
 	github.com/projectdiscovery/mapcidr v0.0.8 // indirect
 	github.com/projectdiscovery/networkpolicy v0.0.1 // indirect
-	github.com/projectdiscovery/rawhttp v0.0.8 // indirect
 	github.com/projectdiscovery/retryabledns v1.0.13-0.20210916165024-76c5b76fd59a // indirect
 	github.com/projectdiscovery/retryablehttp-go v1.0.2 // indirect
 	github.com/projectdiscovery/stringsutil v0.0.0-20210830151154-f567170afdd9 // indirect
