@@ -69,7 +69,6 @@ type Options struct {
 	Ports       *string
 	Threads     *int
 	Porttimeout *int
-	Cdn         *bool
 	Resolvers   *string
 	AmassInput  *bool
 }
@@ -87,6 +86,11 @@ type Response struct {
 	HTTP2    bool
 	Pipeline bool
 	Duration time.Duration
+}
+
+type PortOpenByIp struct {
+	IP        string
+	Open_port []string
 }
 
 const WappazlyerRoot = "https://raw.githubusercontent.com/wappalyzer/wappalyzer/master/src"
@@ -107,11 +111,10 @@ func main() {
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
 	options.Threads = flag.Int("threads", 10, "Number of threads in same time")
 	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
-	options.Cdn = flag.Bool("cdn", false, "Exclude port scanning on cdn")
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
 	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
 	flag.Parse()
-
+	var portOpenByIp []PortOpenByIp
 	if *options.Screenshot != "" {
 		file, err := os.Open(*options.Screenshot)
 		if err != nil {
@@ -126,6 +129,7 @@ func main() {
 		}
 		defer file.Close()
 	}
+
 	fastdialerOpts := fastdialer.DefaultOptions
 	fastdialerOpts.EnableFallback = true
 	fastdialerOpts.WithDialerHistory = true
@@ -161,12 +165,13 @@ func main() {
 	portList := strings.Split(*options.Ports, ",")
 	cdn, err := cdncheck.NewWithCache()
 	var url string
+	var ip string
 	for scanner.Scan() {
 		if *options.AmassInput {
 			var result map[string]interface{}
 			json.Unmarshal([]byte(scanner.Text()), &result)
 			url = result["name"].(string)
-
+			ip = result["addresses"].([]interface{})[0].(map[string]interface{})["ip"].(string)
 		} else {
 			url = scanner.Text()
 		}
@@ -178,40 +183,53 @@ func main() {
 			log.Fatal(err)
 		}
 
-		if *options.Cdn {
-			client := &http.Client{
-				Timeout: 3 * time.Second,
-				Transport: &http.Transport{
-					MaxIdleConnsPerHost: -1,
-					TLSClientConfig: &tls.Config{
-						InsecureSkipVerify: true,
-					},
-					DialContext:       dialer.Dial,
-					DisableKeepAlives: true,
+		client := &http.Client{
+			Timeout: 3 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConnsPerHost: -1,
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
 				},
-			}
-
-			client.Get("http://" + url)
-			ip := dialer.GetDialedIP(url)
-			isCDN, cdnName, err := cdn.Check(net.ParseIP(ip))
-			//fmt.Println(isCDN, ip)
-			if err != nil {
-				log.Fatal(err)
-			}
-			//fmt.Println(isCDN)
-			if isCDN {
-				portTemp = []string{"80", "443"}
-				CdnName = cdnName
-			}
+				DialContext:       dialer.Dial,
+				DisableKeepAlives: true,
+			},
 		}
+
+		if !*options.AmassInput {
+			client.Get("http://" + url)
+			ip = dialer.GetDialedIP(url)
+		}
+
+		isCDN, cdnName, err := cdn.Check(net.ParseIP(ip))
+		//fmt.Println(isCDN, ip)
+		if err != nil {
+			log.Fatal(err)
+		}
+		//fmt.Println(isCDN)
+		if isCDN {
+			portTemp = []string{"80", "443"}
+			CdnName = cdnName
+		}
+
 		var portOpen []string
-		for _, portEnum := range portTemp {
+		alreadyScanned := checkIpAlreadyScan(ip, portOpenByIp)
 
-			openPort := scanPort("tcp", url, portEnum, *options.Porttimeout)
+		if alreadyScanned.IP != "" {
+			portOpen = alreadyScanned.Open_port
+		} else {
+			for _, portEnum := range portTemp {
 
-			if openPort {
-				portOpen = append(portOpen, portEnum)
+				openPort := scanPort("tcp", url, portEnum, *options.Porttimeout)
+
+				if openPort {
+					portOpen = append(portOpen, portEnum)
+				}
 			}
+			var tempScanned PortOpenByIp
+			tempScanned.IP = ip
+			tempScanned.Open_port = portOpen
+			portOpenByIp = append(portOpenByIp, tempScanned)
+
 		}
 
 		url = strings.TrimSpace(url)
@@ -1061,4 +1079,12 @@ func RandStringBytes(n int) string {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
 	}
 	return string(b)
+}
+func checkIpAlreadyScan(ip string, list []PortOpenByIp) PortOpenByIp {
+	for _, ipScanned := range list {
+		if ip == ipScanned.IP {
+			return ipScanned
+		}
+	}
+	return PortOpenByIp{}
 }
