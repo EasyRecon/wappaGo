@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -88,6 +89,9 @@ type Response struct {
 	Duration time.Duration
 }
 
+const WappazlyerRoot = "https://raw.githubusercontent.com/wappalyzer/wappalyzer/master/src"
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
 var interrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url"}
 
 /*
@@ -147,8 +151,12 @@ func main() {
 	if err := chromedp.Run(ctxAlloc1); err != nil {
 		panic(err)
 	}
-
-	resultGlobal := loadTechnologiesFiles()
+	folder, errDownload := downloadTechnologies()
+	if errDownload != nil {
+		fmt.Println("error during downbloading techno file")
+	}
+	defer os.RemoveAll(folder)
+	resultGlobal := loadTechnologiesFiles(folder)
 	swg := sizedwaitgroup.New(*options.Threads)
 	portList := strings.Split(*options.Ports, ",")
 	cdn, err := cdncheck.NewWithCache()
@@ -842,11 +850,11 @@ func scanPort(protocol, hostname string, port string, portTimeout int) bool {
 	defer conn.Close()
 	return true
 }
-func loadTechnologiesFiles() map[string]interface{} {
+func loadTechnologiesFiles(folder string) map[string]interface{} {
 
 	// Open our jsonFile
 	var resultGlobal map[string]interface{}
-	for _, s := range find("wappalyzer/src/technologies", ".json") {
+	for _, s := range find(folder, ".json") {
 
 		jsonFile, err := os.Open(s)
 		// if we os.Open returns an error then handle it
@@ -1017,6 +1025,35 @@ func checkRequired(technoName string, technoList map[string]interface{}, tech []
 	return tech
 }
 
-func domDetect() {
+func downloadTechnologies() (string, error) {
+	files := []string{"_", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"}
+	folder := RandStringBytes(20)
+	_ = os.Mkdir(folder, 0666)
+	for _, f := range files {
+		url := fmt.Sprintf("%v/technologies/%v.json", WappazlyerRoot, f)
+		resp, err := http.Get(url)
+		if err != nil {
+			return "", err
+		}
 
+		body, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		file, _ := os.OpenFile(
+			folder+"/"+f+".json",
+			os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
+			0666,
+		)
+		file.Write(body)
+		file.Close()
+
+	}
+	return folder, nil
+}
+
+func RandStringBytes(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
 }

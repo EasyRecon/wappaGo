@@ -1,4 +1,4 @@
-module wappaGo
+module github.com/EasyRecon/wappaGo
 
 go 1.18
 
