@@ -19,7 +19,7 @@ cat domain.txt | ./wappaGo
 else you can directly pipe wappaGo on Amass JSON output like :
 
 ```
-amass enum -d exemple.com -json out.json | ./wappaGo -amass-input
+amass enum -d exemple.com -json out.json ; cat out.json | ./wappaGo -amass-input
 ```
 ## Todo
 
