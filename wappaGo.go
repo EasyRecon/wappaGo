@@ -46,7 +46,7 @@ func main() {
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
 	options.Threads = flag.Int("threads", 10, "Number of threads in same time")
-	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
+	options.Porttimeout = flag.Int("port-timeout", 800, "Timeout during port scanning in ms")
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
 	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
 	flag.Parse()
@@ -96,13 +96,15 @@ func main() {
 		fmt.Println("error during downbloading techno file")
 	}
 	defer os.RemoveAll(folder)
+	portList := strings.Split(*options.Ports, ",")
 	resultGlobal := technologies.LoadTechnologiesFiles(folder)
 	swg := sizedwaitgroup.New(*options.Threads)
-	portList := strings.Split(*options.Ports, ",")
+	swg1 := sizedwaitgroup.New(60)
 	cdn, err := cdncheck.NewWithCache()
 	var url string
 	var ip string
 	for scanner.Scan() {
+
 		if *options.AmassInput {
 			var result map[string]interface{}
 			json.Unmarshal([]byte(scanner.Text()), &result)
@@ -153,14 +155,20 @@ func main() {
 		if alreadyScanned.IP != "" {
 			portOpen = alreadyScanned.Open_port
 		} else {
+
 			for _, portEnum := range portTemp {
+				swg1.Add()
+				go func(portEnum string) {
+					defer swg1.Done()
+					openPort := scanPort("tcp", url, portEnum, *options.Porttimeout)
 
-				openPort := scanPort("tcp", url, portEnum, *options.Porttimeout)
+					if openPort {
+						portOpen = append(portOpen, portEnum)
+					}
+				}(portEnum)
 
-				if openPort {
-					portOpen = append(portOpen, portEnum)
-				}
 			}
+			swg1.Wait()
 			var tempScanned structure.PortOpenByIp
 			tempScanned.IP = ip
 			tempScanned.Open_port = portOpen
@@ -179,9 +187,10 @@ func main() {
 
 			}(port, url, portOpen, dialer, CdnName)
 		}
+		swg.Wait()
 
 	}
-	swg.Wait()
+
 }
 
 func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string) {
