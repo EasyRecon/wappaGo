@@ -45,8 +45,9 @@ func main() {
 	options := structure.Options{}
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
-	options.Threads = flag.Int("threads", 10, "Number of threads in same time")
-	options.Porttimeout = flag.Int("port-timeout", 800, "Timeout during port scanning in ms")
+	options.ThreadsChrome = flag.Int("threads-chrome", 10, "Number of threads to detect technology (Chrome) in same time")
+	options.ThreadsPorts = flag.Int("threads-ports", 60, "Number of threads to scan port in same time")
+	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
 	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
 	flag.Parse()
@@ -98,8 +99,8 @@ func main() {
 	defer os.RemoveAll(folder)
 	portList := strings.Split(*options.Ports, ",")
 	resultGlobal := technologies.LoadTechnologiesFiles(folder)
-	swg := sizedwaitgroup.New(*options.Threads)
-	swg1 := sizedwaitgroup.New(60)
+	swg := sizedwaitgroup.New(*options.ThreadsChrome)
+	swg1 := sizedwaitgroup.New(*options.ThreadsPorts)
 	cdn, err := cdncheck.NewWithCache()
 	var url string
 	var ip string
