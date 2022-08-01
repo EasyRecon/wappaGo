@@ -50,6 +50,7 @@ func main() {
 	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
 	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
+	options.FollowRedirect = flag.Bool("follow-redirect", false, "Follow redirect to detect technologie")
 	flag.Parse()
 	var portOpenByIp []structure.PortOpenByIp
 	if *options.Screenshot != "" {
@@ -184,7 +185,7 @@ func main() {
 			go func(port string, url string, portOpen []string, dialer *fastdialer.Dialer, CdnName string) {
 				defer swg.Done()
 
-				lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot, dialer, portOpen, CdnName)
+				lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot, dialer, portOpen, CdnName, *options.FollowRedirect)
 
 			}(port, url, portOpen, dialer, CdnName)
 		}
@@ -194,7 +195,7 @@ func main() {
 
 }
 
-func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string) {
+func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string, followRedirect bool) {
 
 	data := structure.Data{}
 	data.Infos.CDN = CdnName
@@ -211,21 +212,35 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		urlDataPort = urlData
 	}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+	client := &http.Client{}
+
+	if followRedirect {
+		client = &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				DialContext:       dialer.Dial,
+				DisableKeepAlives: true,
 			},
-			DialContext:       dialer.Dial,
-			DisableKeepAlives: true,
-		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			//data.Infos.Location = fmt.Sprintf("%s", req.URL)
+		}
 
-			return http.ErrUseLastResponse
-
-		},
+	} else {
+		client = &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				DialContext:       dialer.Dial,
+				DisableKeepAlives: true,
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				//data.Infos.Location = fmt.Sprintf("%s", req.URL)
+				return http.ErrUseLastResponse
+			},
+		}
 	}
 
 	var TempResp structure.Response

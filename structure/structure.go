@@ -40,13 +40,14 @@ type Data struct {
 	Infos Host   `json:"infos"`
 }
 type Options struct {
-	Screenshot    *string
-	Ports         *string
-	ThreadsChrome *int
-	ThreadsPorts  *int
-	Porttimeout   *int
-	Resolvers     *string
-	AmassInput    *bool
+	Screenshot     *string
+	Ports          *string
+	ThreadsChrome  *int
+	ThreadsPorts   *int
+	Porttimeout    *int
+	Resolvers      *string
+	AmassInput     *bool
+	FollowRedirect *bool
 }
 type Response struct {
 	StatusCode    int

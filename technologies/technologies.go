@@ -40,6 +40,12 @@ func CheckRequired(technoName string, technoList map[string]interface{}, tech []
 				technoTemp := structure.Technologie{}
 				technoTemp.Name = technoList[technoName].(map[string]interface{})["implies"].(string)
 				tech = append(tech, technoTemp)
+			} else if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["implies"]) == "[]interface {}" {
+				for _, req := range technoList[technoName].(map[string]interface{})["implies"].([]interface{}) {
+					technoTemp := structure.Technologie{}
+					technoTemp.Name = req.(string)
+					tech = append(tech, technoTemp)
+				}
 			} else {
 				if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["implies"].(map[string]interface{})) == "string" {
 					technoTemp := structure.Technologie{}
