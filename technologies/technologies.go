@@ -35,6 +35,26 @@ func CheckRequired(technoName string, technoList map[string]interface{}, tech []
 
 			}
 		}
+		if name == "implies" {
+			if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["implies"]) == "string" {
+				technoTemp := structure.Technologie{}
+				technoTemp.Name = technoList[technoName].(map[string]interface{})["implies"].(string)
+				tech = append(tech, technoTemp)
+			} else {
+				if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["implies"].(map[string]interface{})) == "string" {
+					technoTemp := structure.Technologie{}
+					technoTemp.Name = technoList[technoName].(map[string]interface{})["implies"].(string)
+					tech = append(tech, technoTemp)
+				} else {
+					for req, _ := range technoList[technoName].(map[string]interface{})["implies"].(map[string]interface{}) {
+						technoTemp := structure.Technologie{}
+						technoTemp.Name = req
+						tech = append(tech, technoTemp)
+					}
+				}
+
+			}
+		}
 	}
 	return tech
 }
