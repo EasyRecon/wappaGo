@@ -18,7 +18,6 @@ import (
 )
 
 func Run(resultGlobal map[string]interface{}, resp structure.Response, srcList []string, ctx context.Context, hote structure.Host, cookiesList []*network.Cookie, node *cdp.Node, body string) []structure.Technologie {
-
 	var technos []structure.Technologie
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(body))
 	//hote := Host{}
@@ -81,13 +80,11 @@ func Run(resultGlobal map[string]interface{}, resp structure.Response, srcList [
 				}
 				if key == "headers" {
 					for header, _ := range resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{}) {
-						//fmt.Println(header, "---------------------", resp.Header)
 						for headerName, _ := range resp.Headers {
 							if strings.ToLower(header) == strings.ToLower(headerName) {
 								//headerValue := resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[header]
 								if resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[headerName] != "" {
 									regex := strings.Split(fmt.Sprintf("%v", resultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{})[headerName]), "\\;")
-
 									findregex, _ := regexp.MatchString("(?i)"+regex[0], resp.Headers[headerName][0])
 									//fmt.Println(findregex, technoName, headerName, resp.Header[headerName][0])
 									if findregex == true {

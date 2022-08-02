@@ -84,7 +84,7 @@ func main() {
 	//urls, _ := reader.ReadString('\n')
 
 	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
-	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", true), chromedp.Flag("disable-gpu", true), chromedp.Flag("disable-webgl", true), chromedp.Flag("disable-popup-blocking", true))...)
+	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", true), chromedp.Flag("disable-gpu", true), chromedp.Flag("disable-webgl", true), chromedp.Flag("ignore-certificate-errors", "1"), chromedp.Flag("disable-popup-blocking", true))...)
 	defer cancel()
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
 	//ctxAlloc1, cancel := chromedp.NewContext(context.Background())
