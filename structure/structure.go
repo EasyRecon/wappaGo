@@ -29,9 +29,9 @@ type Host struct {
 	Response_time  time.Duration `json:"response_time"`
 	Screenshot     string        `json:"screenshot_name,omitempty"`
 	Technologies   []Technologie `json:"technologies"`
-	Content_length int           `json:"content_length`
-	Content_type   string        `json:"content_type`
-	IP             string        `json:"ip`
+	Content_length int           `json:"content_length"`
+	Content_type   string        `json:"content_type"`
+	IP             string        `json:"ip"`
 	Cname          []string      `json:"cname,omitempty"`
 	CDN            string        `json:"cdn,omitempty"`
 }

@@ -37,6 +37,8 @@ cd wappaGo && go build wappaGo.go
 Usage of ./wappaGo:
   -amass-input
     	Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo
+  -follow-redirect
+        Follow redirect to detect technologie
   -port-timeout int
     	Timeout during port scanning in ms (default 1000)
   -ports string

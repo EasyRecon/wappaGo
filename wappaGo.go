@@ -63,7 +63,10 @@ func main() {
 			// handle the error and return
 		}
 		if !fileinfo.IsDir() {
-			log.Fatal("error with the screenshot path")
+			err := os.Mkdir(*options.Screenshot, os.ModePerm)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 		defer file.Close()
 	}
@@ -206,6 +209,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	//u, err := url.Parse(urlData)
 	var urlDataPort string
 	var resp *structure.Response
+	var orginalHost = urlData
 	if port != "80" && port != "443" {
 		urlDataPort = urlData + ":" + port
 	} else {
@@ -278,7 +282,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	}
 	ip := dialer.GetDialedIP(data.Infos.Data)
 	data.Infos.IP = ip
-	dnsData, err := dialer.GetDNSData(urlData)
+	dnsData, err := dialer.GetDNSData(orginalHost)
 	if dnsData != nil && err == nil {
 		data.Infos.Cname = dnsData.CNAME
 	}
@@ -349,7 +353,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 			)
 			file.Write(buf)
 			file.Close()
-			data.Infos.Screenshot = screen + "/" + imgTitle + ".png"
+			data.Infos.Screenshot =  imgTitle + ".png"
 		}
 		b, err := json.Marshal(data)
 
