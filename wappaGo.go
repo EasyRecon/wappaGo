@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
+    "errors"
 	"github.com/EasyRecon/wappaGo/analyze"
 	"github.com/EasyRecon/wappaGo/lib"
 	"github.com/EasyRecon/wappaGo/structure"
@@ -54,21 +54,12 @@ func main() {
 	flag.Parse()
 	var portOpenByIp []structure.PortOpenByIp
 	if *options.Screenshot != "" {
-		file, err := os.Open(*options.Screenshot)
-		if err != nil {
-			// handle the error and return
-		}
-		fileinfo, err := os.Stat(*options.Screenshot)
-		if err != nil {
-			// handle the error and return
-		}
-		if !fileinfo.IsDir() {
+		if _, err := os.Stat(*options.Screenshot); errors.Is(err, os.ErrNotExist) {
 			err := os.Mkdir(*options.Screenshot, os.ModePerm)
 			if err != nil {
 				log.Println(err)
 			}
 		}
-		defer file.Close()
 	}
 
 	fastdialerOpts := fastdialer.DefaultOptions
