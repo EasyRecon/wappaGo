@@ -33,6 +33,9 @@ cd wappaGo && go build wappaGo.go
 **Note :** _wappaGo requires Chrome to be present on the system_
 
 # Usage
+
+__On Linux/macOS wappaGo must be root__
+
 ```
 Usage of ./wappaGo:
   -amass-input
