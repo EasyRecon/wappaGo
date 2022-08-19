@@ -30,9 +30,12 @@ git clone https://github.com/EasyRecon/wappaGo
 cd wappaGo && go build wappaGo.go
 ```
 
-**Note :** _wappaGo requires Chrome to be present on the system_
+**Note :** _wappaGo requires Chrome to be present on the system and on Linux & MacOS wappaGo must be root_
 
 # Usage
+
+
+
 ```
 Usage of ./wappaGo:
   -amass-input
