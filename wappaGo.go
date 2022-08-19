@@ -77,8 +77,18 @@ func main() {
 	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
 	//urls, _ := reader.ReadString('\n')
 
+	optionsChromeCtx := []chromedp.ExecAllocatorOption{}
+	optionsChromeCtx = append(optionsChromeCtx, chromedp.DefaultExecAllocatorOptions[:]...)
+	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("headless", true))
+	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("disable-popup-blocking", true))
+	optionsChromeCtx = append(optionsChromeCtx, chromedp.DisableGPU)
+	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("disable-webgl", true))
+	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("ignore-certificate-errors", true)) // RIP shittyproxy.go
+	optionsChromeCtx = append(optionsChromeCtx, chromedp.WindowSize(1400, 900))
+
+
 	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
-	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", true), chromedp.Flag("disable-gpu", true), chromedp.Flag("disable-webgl", true), chromedp.Flag("ignore-certificate-errors", "1"), chromedp.Flag("disable-popup-blocking", true))...)
+	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(),optionsChromeCtx...)
 	defer cancel()
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
 	//ctxAlloc1, cancel := chromedp.NewContext(context.Background())
@@ -303,7 +313,8 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		err = chromedp.Run(cloneCTX,
 			chromedp.Navigate(urlData),
 			chromedp.Title(&data.Infos.Title),
-			chromedp.FullScreenshot(&buf, 100),
+			//chromedp.FullScreenshot(&buf, 100),
+			chromedp.CaptureScreenshot(&buf),
 			chromedp.ActionFunc(func(ctx context.Context) error {
 
 				cookiesList, _ := network.GetCookies().Do(ctx)
