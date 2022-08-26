@@ -42,12 +42,13 @@ type Data struct {
 type Options struct {
 	Screenshot     *string
 	Ports          *string
-	ThreadsChrome  *int
-	ThreadsPorts   *int
+	Threads        *int
 	Porttimeout    *int
 	Resolvers      *string
 	AmassInput     *bool
 	FollowRedirect *bool
+	ChromeTimeout  *int
+	ChromeThreads  *int
 }
 type Response struct {
 	StatusCode    int

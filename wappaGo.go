@@ -42,12 +42,14 @@ missing detection:
 
 */
 func main() {
+
 	options := structure.Options{}
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
-	options.ThreadsChrome = flag.Int("threads-chrome", 10, "Number of threads to detect technology (Chrome) in same time")
-	options.ThreadsPorts = flag.Int("threads-ports", 60, "Number of threads to scan port in same time")
+	options.Threads = flag.Int("threads", 10, "Number of threads to scan port in same time")
 	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
+	//options.ChromeTimeout = flag.Int("chrome-timeout", 0000, "Timeout during navigation (chrome) in sec")
+	options.ChromeThreads = flag.Int("chrome-threads", 5, "Number of chromes threads in each main threads total = option.threads*option.chrome-threads (Default 5)")
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
 	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
 	options.FollowRedirect = flag.Bool("follow-redirect", false, "Follow redirect to detect technologie")
@@ -86,12 +88,12 @@ func main() {
 	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("ignore-certificate-errors", true)) // RIP shittyproxy.go
 	optionsChromeCtx = append(optionsChromeCtx, chromedp.WindowSize(1400, 900))
 
-
 	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
 	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(),optionsChromeCtx...)
 	defer cancel()
+	//ctxAlloc, _ = context.WithTimeout(ctxAlloc, 10*time.Second)
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
-	//ctxAlloc1, cancel := chromedp.NewContext(context.Background())
+	//ctxAlloc1, cancel := chromedp.NewContext(context.Background()) 
 	defer cancel()
 
 	if err := chromedp.Run(ctxAlloc1); err != nil {
@@ -102,16 +104,32 @@ func main() {
 		fmt.Println("error during downbloading techno file")
 	}
 	defer os.RemoveAll(folder)
-	portList := strings.Split(*options.Ports, ",")
+	
 	resultGlobal := technologies.LoadTechnologiesFiles(folder)
-	swg := sizedwaitgroup.New(*options.ThreadsChrome)
-	swg1 := sizedwaitgroup.New(*options.ThreadsPorts)
+
 	cdn, err := cdncheck.NewWithCache()
+			if err != nil {
+			log.Fatal(err)
+		}
 	var url string
 	var ip string
+	swg := sizedwaitgroup.New(*options.Threads)
 	for scanner.Scan() {
+		swg.Add()
+		go func(){
+			defer swg.Done()
+			start(options,scanner,portOpenByIp,url,ip, cdn,resultGlobal,dialer,ctxAlloc1)
+		}()
+	}
+	swg.Wait()
+}
 
-		if *options.AmassInput {
+
+func start(options structure.Options,scanner *bufio.Scanner, portOpenByIp []structure.PortOpenByIp,url string,ip string, cdn *cdncheck.Client,resultGlobal map[string]interface{},dialer *fastdialer.Dialer,ctxAlloc1 context.Context) {
+	portList := strings.Split(*options.Ports, ",")
+	swg1 := sizedwaitgroup.New(len(portList))
+	swg := sizedwaitgroup.New(*options.ChromeThreads)
+	if *options.AmassInput {
 			var result map[string]interface{}
 			json.Unmarshal([]byte(scanner.Text()), &result)
 			url = result["name"].(string)
@@ -123,12 +141,10 @@ func main() {
 		var CdnName string
 		portTemp := portList
 
-		if err != nil {
-			log.Fatal(err)
-		}
+
 
 		client := &http.Client{
-			Timeout: 3 * time.Second,
+			Timeout: 2 * time.Second,
 			Transport: &http.Transport{
 				MaxIdleConnsPerHost: -1,
 				TLSClientConfig: &tls.Config{
@@ -195,12 +211,9 @@ func main() {
 		}
 		swg.Wait()
 
-	}
-
 }
 
 func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string, followRedirect bool) {
-
 	data := structure.Data{}
 	data.Infos.CDN = CdnName
 	data.Infos.Data = urlData
@@ -287,7 +300,6 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	if dnsData != nil && err == nil {
 		data.Infos.Cname = dnsData.CNAME
 	}
-
 	if errorContinue {
 		if data.Infos.Location != "" {
 			urlData = data.Infos.Location
@@ -320,7 +332,6 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 				cookiesList, _ := network.GetCookies().Do(ctx)
 				node, _ := dom.GetDocument().Do(ctx)
 				body, _ := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
-
 				reader := strings.NewReader(body)
 				doc, err := goquery.NewDocumentFromReader(reader)
 
@@ -337,6 +348,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 						srcList = append(srcList, srcLink)
 					}
 				})
+				 
 				data.Infos.Technologies = analyze.Run(resultGlobal, TempResp, srcList, ctx, data.Infos, cookiesList, node, body)
 
 				return nil
@@ -379,8 +391,6 @@ func scanPort(protocol, hostname string, port string, portTimeout int) bool {
 
 // Do http request
 func Do(req *http.Request, client *http.Client) (*structure.Response, error) {
-	timeStart := time.Now()
-
 	var gzipRetry bool
 get_response:
 	httpresp, err := client.Do(req)
@@ -450,7 +460,7 @@ get_response:
 	// number of lines
 	resp.Lines = len(strings.Split(respbodystr, "\n"))
 
-	resp.Duration = time.Since(timeStart)
+
 
 	return &resp, nil
 }
