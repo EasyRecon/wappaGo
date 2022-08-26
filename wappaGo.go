@@ -46,7 +46,7 @@ func main() {
 	options := structure.Options{}
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
-	options.Threads = flag.Int("threads", 10, "Number of threads to scan port in same time")
+	options.Threads = flag.Int("threads", 10, "Number of threads to start recon in same time")
 	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
 	//options.ChromeTimeout = flag.Int("chrome-timeout", 0000, "Timeout during navigation (chrome) in sec")
 	options.ChromeThreads = flag.Int("chrome-threads", 5, "Number of chromes threads in each main threads total = option.threads*option.chrome-threads (Default 5)")
@@ -68,11 +68,14 @@ func main() {
 	fastdialerOpts.EnableFallback = true
 	fastdialerOpts.WithDialerHistory = true
 
-	if len(*options.Resolvers) > 0 {
-		fastdialerOpts.BaseResolvers = strings.Split(*options.Resolvers, ",")
-	}
+	if len(*options.Resolvers) == 0 {
+		*options.Resolvers = "8.8.8.8,1.1.1.1,64.6.64.6,,74.82.42.42,1.0.0.1,8.8.4.4,64.6.65.6,77.88.8.8"
+	} 
+	fastdialerOpts.BaseResolvers = strings.Split(*options.Resolvers, ",")
+
 	dialer, err := fastdialer.NewDialer(fastdialerOpts)
 	defer dialer.Close()
+
 	if err != nil {
 		fmt.Errorf("could not create resolver cache: %s", err)
 	}
@@ -91,7 +94,7 @@ func main() {
 	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
 	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(),optionsChromeCtx...)
 	defer cancel()
-	//ctxAlloc, _ = context.WithTimeout(ctxAlloc, 10*time.Second)
+	ctxAlloc, _ = context.WithTimeout(ctxAlloc, 15*time.Second)
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
 	//ctxAlloc1, cancel := chromedp.NewContext(context.Background()) 
 	defer cancel()
@@ -114,29 +117,34 @@ func main() {
 	var url string
 	var ip string
 	swg := sizedwaitgroup.New(*options.Threads)
+	url=""
+	ip=""
 	for scanner.Scan() {
+		if *options.AmassInput {
+				var result map[string]interface{}
+				json.Unmarshal([]byte(scanner.Text()), &result)
+				url = result["name"].(string)
+				ip = result["addresses"].([]interface{})[0].(map[string]interface{})["ip"].(string)
+			} else {
+				url = scanner.Text()
+		}
 		swg.Add()
-		go func(){
+		go func(url string, ip string){
 			defer swg.Done()
-			start(options,scanner,portOpenByIp,url,ip, cdn,resultGlobal,dialer,ctxAlloc1)
-		}()
+			
+			start(options,portOpenByIp,url,ip, cdn,resultGlobal,dialer,ctxAlloc1)
+		}(url,ip)
 	}
 	swg.Wait()
 }
 
 
-func start(options structure.Options,scanner *bufio.Scanner, portOpenByIp []structure.PortOpenByIp,url string,ip string, cdn *cdncheck.Client,resultGlobal map[string]interface{},dialer *fastdialer.Dialer,ctxAlloc1 context.Context) {
+func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url string,ip string, cdn *cdncheck.Client,resultGlobal map[string]interface{},dialer *fastdialer.Dialer,ctxAlloc1 context.Context) {
 	portList := strings.Split(*options.Ports, ",")
 	swg1 := sizedwaitgroup.New(len(portList))
+
 	swg := sizedwaitgroup.New(*options.ChromeThreads)
-	if *options.AmassInput {
-			var result map[string]interface{}
-			json.Unmarshal([]byte(scanner.Text()), &result)
-			url = result["name"].(string)
-			ip = result["addresses"].([]interface{})[0].(map[string]interface{})["ip"].(string)
-		} else {
-			url = scanner.Text()
-		}
+
 
 		var CdnName string
 		portTemp := portList
@@ -180,14 +188,13 @@ func start(options structure.Options,scanner *bufio.Scanner, portOpenByIp []stru
 
 			for _, portEnum := range portTemp {
 				swg1.Add()
-				go func(portEnum string) {
+				go func(portEnum string, url string) {
 					defer swg1.Done()
 					openPort := scanPort("tcp", url, portEnum, *options.Porttimeout)
-
 					if openPort {
 						portOpen = append(portOpen, portEnum)
 					}
-				}(portEnum)
+				}(portEnum,url)
 
 			}
 			swg1.Wait()
@@ -381,7 +388,6 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 func scanPort(protocol, hostname string, port string, portTimeout int) bool {
 	address := hostname + ":" + port
 	conn, err := net.DialTimeout(protocol, address, time.Duration(portTimeout)*time.Millisecond)
-
 	if err != nil {
 		return false
 	}
