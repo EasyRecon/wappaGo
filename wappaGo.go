@@ -46,7 +46,7 @@ func main() {
 	options := structure.Options{}
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
-	options.Threads = flag.Int("threads", 10, "Number of threads to start recon in same time")
+	options.Threads = flag.Int("threads", 5, "Number of threads to start recon in same time")
 	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
 	//options.ChromeTimeout = flag.Int("chrome-timeout", 0000, "Timeout during navigation (chrome) in sec")
 	options.ChromeThreads = flag.Int("chrome-threads", 5, "Number of chromes threads in each main threads total = option.threads*option.chrome-threads (Default 5)")
@@ -92,9 +92,9 @@ func main() {
 	optionsChromeCtx = append(optionsChromeCtx, chromedp.WindowSize(1400, 900))
 
 	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
-	ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(),optionsChromeCtx...)
-	defer cancel()
-	ctxAlloc, _ = context.WithTimeout(ctxAlloc, 15*time.Second)
+	ctxAlloc, cancel1 := chromedp.NewExecAllocator(context.Background(),optionsChromeCtx...)
+	defer cancel1()
+	ctxAlloc, _ = context.WithTimeout(ctxAlloc, 30*time.Second)
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
 	//ctxAlloc1, cancel := chromedp.NewContext(context.Background()) 
 	defer cancel()
@@ -211,9 +211,7 @@ func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url 
 			swg.Add()
 			go func(port string, url string, portOpen []string, dialer *fastdialer.Dialer, CdnName string) {
 				defer swg.Done()
-
 				lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot, dialer, portOpen, CdnName, *options.FollowRedirect)
-
 			}(port, url, portOpen, dialer, CdnName)
 		}
 		swg.Wait()
@@ -320,7 +318,12 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 					if err := chromedp.Run(cloneCTX,
 						page.HandleJavaScriptDialog(true),
 					); err != nil {
-						panic(err)
+						b, err := json.Marshal(data)
+						if err != nil {
+							fmt.Println("Error:", err)
+						}
+						fmt.Println(string(b))
+						return 
 					}
 				}()
 			}

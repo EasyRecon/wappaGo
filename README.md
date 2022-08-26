@@ -3,7 +3,7 @@
 <p align="center">  
     <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-_red.svg"></a>  
     <a href="https://github.com/EasyRecon/Hunt3r/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat"></a>  
-    <a href="https://github.com/EasyRecon/Hunt3r"><img src="https://img.shields.io/badge/release-v0.0.5-informational"></a>
+    <a href="https://github.com/EasyRecon/Hunt3r"><img src="https://img.shields.io/badge/release-v0.0.7-informational"></a>
     <a href="https://github.com/easyrecon/wappago/issues" target="_blank"><img src="https://img.shields.io/github/issues/easyrecon/wappago?color=blue" /></a>
 </p>
 
@@ -41,7 +41,7 @@ Usage of ./wappaGo:
   -amass-input
         Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo
   -chrome-threads int
-        Number of chromes threads in each main threads total = option.threads*option.chrome-threads (Default 5) (default 5)
+        Number of chromes threads in each main threads total = option.threads*option.chrome-threads (default 5)
   -follow-redirect
         Follow redirect to detect technologie
   -port-timeout int
@@ -53,7 +53,7 @@ Usage of ./wappaGo:
   -screenshot string
         path to screenshot if empty no screenshot
   -threads int
-        Number of threads to scan port in same time (default 10)
+        Number of threads to scan port in same time (default 5)
 
 ```
 
