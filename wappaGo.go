@@ -94,7 +94,7 @@ func main() {
 	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
 	ctxAlloc, cancel1 := chromedp.NewExecAllocator(context.Background(),optionsChromeCtx...)
 	defer cancel1()
-	ctxAlloc, _ = context.WithTimeout(ctxAlloc, 30*time.Second)
+
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
 	//ctxAlloc1, cancel := chromedp.NewContext(context.Background()) 
 	defer cancel()
@@ -309,7 +309,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		if data.Infos.Location != "" {
 			urlData = data.Infos.Location
 		}
-
+		ctxAlloc1, _ = context.WithTimeout(ctxAlloc1, 30*time.Second)
 		cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
 		chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 			if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
