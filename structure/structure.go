@@ -2,7 +2,6 @@ package structure
 
 import (
 	"time"
-
 	"github.com/projectdiscovery/cryptoutil"
 )
 
@@ -60,10 +59,9 @@ type Response struct {
 	Words         int
 	Lines         int
 	TLSData       *cryptoutil.TLSData
-
-	HTTP2    bool
-	Pipeline bool
-	Duration time.Duration
+	HTTP2    	  bool
+	Pipeline 	  bool
+	Duration 	  time.Duration
 }
 
 type PortOpenByIp struct {

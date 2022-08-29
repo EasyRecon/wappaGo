@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"bufio"
@@ -21,7 +21,6 @@ import (
 	"github.com/EasyRecon/wappaGo/lib"
 	"github.com/EasyRecon/wappaGo/structure"
 	"github.com/EasyRecon/wappaGo/technologies"
-
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
@@ -34,14 +33,9 @@ import (
 	"github.com/remeh/sizedwaitgroup"
 )
 
-/*
-missing detection:
--dns
--text
 
 
-*/
-func main() {
+func Start() {
 
 	options := structure.Options{}
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
@@ -146,15 +140,18 @@ func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url 
 	swg := sizedwaitgroup.New(*options.ChromeThreads)
 
 
-		var CdnName string
-		portTemp := portList
+	var CdnName string
+	portTemp := portList
 
 
 
-		client := &http.Client{
-			Timeout: 2 * time.Second,
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	client := &http.Client{}
+
+	if *options.FollowRedirect {
+		client = &http.Client{
+			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
-				MaxIdleConnsPerHost: -1,
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
@@ -162,6 +159,23 @@ func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url 
 				DisableKeepAlives: true,
 			},
 		}
+
+	} else {
+		client = &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				DialContext:       dialer.Dial,
+				DisableKeepAlives: true,
+			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				//data.Infos.Location = fmt.Sprintf("%s", req.URL)
+				return http.ErrUseLastResponse
+			},
+		}
+	}
 
 		if !*options.AmassInput {
 			client.Get("http://" + url)
@@ -358,12 +372,15 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 						srcList = append(srcList, srcLink)
 					}
 				})
-				 
-				data.Infos.Technologies = analyze.Run(resultGlobal, TempResp, srcList, ctx, data.Infos, cookiesList, node, body)
+				analyseStruct := analyze.Analyze{resultGlobal, TempResp, srcList, ctx, data.Infos, cookiesList, node, body,[]structure.Technologie{}}
+
+				data.Infos.Technologies = analyseStruct.Run()
 
 				return nil
 			}),
 		)
+
+
 		data.Infos.Technologies = technologies.DedupTechno(data.Infos.Technologies)
 		if screen != "" && len(buf) > 0 {
 			imgTitle := strings.Replace(urlData, ":", "_", -1)

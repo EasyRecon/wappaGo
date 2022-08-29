@@ -6,62 +6,55 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-
 	"github.com/EasyRecon/wappaGo/lib"
 	"github.com/EasyRecon/wappaGo/structure"
-
 	"github.com/imdario/mergo"
 )
+
 
 func CheckRequired(technoName string, technoList map[string]interface{}, tech []structure.Technologie) []structure.Technologie {
 	for name, _ := range technoList[technoName].(map[string]interface{}) {
 		if name == "requires" {
 			if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["requires"]) == "string" {
-				technoTemp := structure.Technologie{}
-				technoTemp.Name = technoList[technoName].(map[string]interface{})["requires"].(string)
-				tech = append(tech, technoTemp)
+				tech = AddTechno(technoList[technoName].(map[string]interface{})["requires"].(string), tech, technoList)
 			} else {
 				if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["requires"].(map[string]interface{})) == "string" {
-					technoTemp := structure.Technologie{}
-					technoTemp.Name = technoList[technoName].(map[string]interface{})["requires"].(string)
-					tech = append(tech, technoTemp)
+					tech = AddTechno(technoList[technoName].(map[string]interface{})["requires"].(string), tech, technoList)
 				} else {
 					for req, _ := range technoList[technoName].(map[string]interface{})["requires"].(map[string]interface{}) {
-						technoTemp := structure.Technologie{}
-						technoTemp.Name = req
-						tech = append(tech, technoTemp)
+						tech = AddTechno(req, tech, technoList)
 					}
 				}
-
 			}
 		}
 		if name == "implies" {
 			if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["implies"]) == "string" {
-				technoTemp := structure.Technologie{}
-				technoTemp.Name = technoList[technoName].(map[string]interface{})["implies"].(string)
-				tech = append(tech, technoTemp)
+				tech = AddTechno(technoList[technoName].(map[string]interface{})["implies"].(string),tech, technoList)
 			} else if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["implies"]) == "[]interface {}" {
 				for _, req := range technoList[technoName].(map[string]interface{})["implies"].([]interface{}) {
-					technoTemp := structure.Technologie{}
-					technoTemp.Name = req.(string)
-					tech = append(tech, technoTemp)
+					tech = AddTechno(req.(string), tech, technoList)
 				}
 			} else {
 				if fmt.Sprintf("%T", technoList[technoName].(map[string]interface{})["implies"].(map[string]interface{})) == "string" {
-					technoTemp := structure.Technologie{}
-					technoTemp.Name = technoList[technoName].(map[string]interface{})["implies"].(string)
-					tech = append(tech, technoTemp)
+					tech = AddTechno(technoList[technoName].(map[string]interface{})["implies"].(string),tech, technoList)
 				} else {
 					for req, _ := range technoList[technoName].(map[string]interface{})["implies"].(map[string]interface{}) {
-						technoTemp := structure.Technologie{}
-						technoTemp.Name = req
-						tech = append(tech, technoTemp)
+						tech = AddTechno(req,tech, technoList)
 					}
 				}
-
 			}
 		}
 	}
+	return tech
+}
+
+func AddTechno(name string,tech []structure.Technologie,technoList map[string]interface{}) ([]structure.Technologie){
+		technoTemp := structure.Technologie{}
+		technoTemp.Name = name
+		if _, ok := technoList[name].(map[string]interface{})["cpe"]; ok {
+		    technoTemp.Cpe = technoList[name].(map[string]interface{})["cpe"].(string)
+		}
+		tech = append(tech, technoTemp)
 	return tech
 }
 
@@ -119,11 +112,14 @@ func DedupTechno(technologies []structure.Technologie) []structure.Technologie {
 	add := true
 	for _, tech := range technologies {
 		add = true
-		for _, checkTech := range output {
+		for i, checkTech := range output {
 			if checkTech == tech {
 				add = false
 			} else {
-				if checkTech.Name == tech.Name && tech.Version == "" {
+				if checkTech.Name == tech.Name  {
+					if( tech.Version != "" &&  checkTech.Version == ""){
+						output[i].Version=tech.Version
+					}
 					add = false
 				}
 			}
