@@ -3,7 +3,6 @@ module github.com/EasyRecon/wappaGo
 go 1.18
 
 require (
-	github.com/EasyRecon/wappaGo/structure v0.0.0-20220826143555-ecafe47f4d42
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/chromedp/cdproto v0.0.0-20220827030233-358ed4af73cf
 	github.com/chromedp/chromedp v0.8.5

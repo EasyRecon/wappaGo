@@ -40,8 +40,6 @@ cd wappaGo && go build wappaGo.go
 Usage of ./wappaGo:
   -amass-input
         Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo
-  -chrome-threads int
-        Number of chromes threads in each main threads total = option.threads*option.chrome-threads (default 5)
   -follow-redirect
         Follow redirect to detect technologie
   -port-timeout int

@@ -136,15 +136,9 @@ func Start() {
 func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url string,ip string, cdn *cdncheck.Client,resultGlobal map[string]interface{},dialer *fastdialer.Dialer,ctxAlloc1 context.Context) {
 	portList := strings.Split(*options.Ports, ",")
 	swg1 := sizedwaitgroup.New(len(portList))
-
 	swg := sizedwaitgroup.New(*options.ChromeThreads)
-
-
 	var CdnName string
 	portTemp := portList
-
-
-
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{}
 
