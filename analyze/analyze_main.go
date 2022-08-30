@@ -49,8 +49,7 @@ func (a *Analyze) Run() []structure.Technologie {
 							//fmt.Println(res,technoName,regex)
 							if res != nil && res != false {
 								
-								technoTemp := structure.Technologie{}
-								technoTemp.Name = technoName
+								technoTemp := a.NewTechno(technoName)
 								if (len(regex) > 1 && strings.HasPrefix(regex[1], "confidence")) || (len(regex) > 2 && strings.HasPrefix(regex[2], "confidence")) {
 									if len(regex) > 1 && strings.HasPrefix(regex[1], "confidence") {
 										technoTemp.Confidence = strings.Split(regex[1], ":")[1]
@@ -67,9 +66,6 @@ func (a *Analyze) Run() []structure.Technologie {
 									if len(regex) > 2 && strings.HasPrefix(regex[2], "version") {
 										technoTemp.Version = fmt.Sprintf("%v", res)
 									}
-								}
-								if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-									technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
 								}
 								a.Technos = append(a.Technos, technoTemp)
 								a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
@@ -104,12 +100,7 @@ func (a *Analyze) Run() []structure.Technologie {
 									//fmt.Println(findregex, technoName, headerName, a.Resp.Header[headerName][0])
 									if findregex == true {
 										//fmt.Println(technoName)
-										technoTemp := structure.Technologie{}
-
-										technoTemp.Name = technoName
-										if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-											technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-										}
+										technoTemp := a.NewTechno(technoName)
 										compiledregex := regexp.MustCompile("(?i)" + regex[0])
 										regexGroup := compiledregex.FindAllStringSubmatch(a.Resp.Headers[headerName][0], -1)
 
@@ -125,11 +116,7 @@ func (a *Analyze) Run() []structure.Technologie {
 										a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 									}
 								} else {
-									technoTemp := structure.Technologie{}
-									technoTemp.Name = technoName
-									if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-										technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-									}
+									technoTemp := a.NewTechno(technoName)
 									a.Technos = append(a.Technos, technoTemp)
 									a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 								}
@@ -142,11 +129,7 @@ func (a *Analyze) Run() []structure.Technologie {
 
 					if fmt.Sprintf("%T", a.ResultGlobal[technoName].(map[string]interface{})[key]) == "string" {
 						doc.Find(a.ResultGlobal[technoName].(map[string]interface{})[key].(string)).Each(func(i int, s *goquery.Selection) {
-							technoTemp := structure.Technologie{}
-							technoTemp.Name = technoName
-							if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-								technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-							}
+							technoTemp := a.NewTechno(technoName)
 							a.Technos = append(a.Technos, technoTemp)
 							a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 						})
@@ -159,11 +142,7 @@ func (a *Analyze) Run() []structure.Technologie {
 								if fmt.Sprintf("%T", domElement) == "string" {
 									doc.Find(domKey).Each(func(i int, s *goquery.Selection) {
 										if domElement == "" {
-											technoTemp := structure.Technologie{}
-											technoTemp.Name = technoName
-											if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-												technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-											}
+											technoTemp := a.NewTechno(technoName)
 											a.Technos = append(a.Technos, technoTemp)
 											a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 										} else {
@@ -172,11 +151,7 @@ func (a *Analyze) Run() []structure.Technologie {
 											findregex, _ := regexp.MatchString("(?i)"+regex[0], a.Body)
 											if findregex {
 												//fmt.Println(technoName)
-												technoTemp := structure.Technologie{}
-												technoTemp.Name = technoName
-												if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-													technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-												}
+												technoTemp := a.NewTechno(technoName)
 												compiledregex := regexp.MustCompile("(?i)" + regex[0])
 												regexGroup := compiledregex.FindAllStringSubmatch(a.Body, -1)
 
@@ -211,12 +186,7 @@ func (a *Analyze) Run() []structure.Technologie {
 
 
 														if findRegex {
-															technoTemp := structure.Technologie{}
-															technoTemp.Name = technoName
-															if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-																technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-															}
-
+															technoTemp := a.NewTechno(technoName)
 															compiledregex := regexp.MustCompile("(?i)" + regex[0])
 															regexGroup := compiledregex.FindAllStringSubmatch(dommAttr, -1)
 															
@@ -233,11 +203,7 @@ func (a *Analyze) Run() []structure.Technologie {
 															a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 														}
 													} else {
-														technoTemp := structure.Technologie{}
-														technoTemp.Name = technoName
-														if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-															technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-														}
+														technoTemp := a.NewTechno(technoName)
 														a.Technos = append(a.Technos, technoTemp)
 														a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 													}
@@ -249,11 +215,7 @@ func (a *Analyze) Run() []structure.Technologie {
 											chromedp.Evaluate("(()=>{a=false;document.querySelectorAll('"+domKey+"').forEach(element=>{if(element."+domKeyElement2+"!=undefined){a=true}});return a})()", &res).Do(a.Ctx)
 											//fmt.Println(res, "(()=>{a=false;document.querySelectorAll('"+domKey+"').forEach(element=>{if(element."+domKeyElement2+"!=undefined){a=true}});return a})()")
 											if res == true {
-												technoTemp := structure.Technologie{}
-												technoTemp.Name = technoName
-												if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-													technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-												}
+												technoTemp := a.NewTechno(technoName)												
 												a.Technos = append(a.Technos, technoTemp)
 												a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 											}
@@ -266,11 +228,7 @@ func (a *Analyze) Run() []structure.Technologie {
 					} else {
 						for _, domArray := range a.ResultGlobal[technoName].(map[string]interface{})[key].([]interface{}) {
 							doc.Find(domArray.(string)).Each(func(i int, s *goquery.Selection) {
-								technoTemp := structure.Technologie{}
-								technoTemp.Name = technoName
-								if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-									technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-								}
+								technoTemp := a.NewTechno(technoName)
 								a.Technos = append(a.Technos, technoTemp)
 								a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 							})
@@ -341,11 +299,7 @@ func  (a *Analyze) analyze_dom(technoName string){
 }
 func  (a *Analyze) analyze_cookies(technoName string,cookie *network.Cookie,cookieTechno string){
 	if cookieTechno == cookie.Name {
-		technoTemp := structure.Technologie{}
-		technoTemp.Name = technoName
-		if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-			technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-		}
+		technoTemp := a.NewTechno(technoName)
 		a.Technos = append(a.Technos, technoTemp)
 		a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 	}
@@ -354,11 +308,7 @@ func  (a *Analyze) analyze_scriptSrc(technoName string,regexStr string,scriptCrc
 	regex := strings.Split(fmt.Sprintf("%v", regexStr), "\\;")
 	findRegex, _ := regexp.MatchString("(?i)"+regex[0], scriptCrc)
 	if findRegex {
-		technoTemp := structure.Technologie{}
-		technoTemp.Name = technoName
-		if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-			technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-		}
+		technoTemp := a.NewTechno(technoName)
 		compiledregex := regexp.MustCompile("(?i)" + regex[0])
 		regexGroup := compiledregex.FindAllStringSubmatch(scriptCrc, -1)
 
@@ -378,8 +328,7 @@ func  (a *Analyze) analyze_scriptSrc(technoName string,regexStr string,scriptCrc
 func  (a *Analyze) analyze_url(technoName string,regexStr string){
 	findregex, _ := regexp.MatchString("(?i)"+regexStr, a.Hote.Location)
 	if findregex == true {
-		technoTemp := structure.Technologie{}
-		technoTemp.Name = technoName
+		technoTemp := a.NewTechno(technoName)
 		a.Technos = append(a.Technos, technoTemp)
 		a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 	}
@@ -389,11 +338,7 @@ func (a *Analyze) analyze_html(technoName string,regexStr interface{}) {
 	regex := strings.Split(fmt.Sprintf("%v", regexStr), "\\;")
 	findregex, _ := regexp.MatchString("(?i)"+regex[0], a.Body)
 	if findregex == true {
-		technoTemp := structure.Technologie{}
-		technoTemp.Name = technoName
-		if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-			technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-		}
+		technoTemp := a.NewTechno(technoName)
 		compiledregex := regexp.MustCompile("(?i)" + regex[0])
 		regexGroup := compiledregex.FindAllStringSubmatch(a.Body, -1)
 
@@ -415,11 +360,7 @@ func  (a *Analyze) analyze_meta(s *goquery.Selection,metaProperties interface{},
 	findregex, _ := regexp.MatchString("(?i)"+regex[0], metaValue)
 	if findregex == true {
 		//fmt.Println(technoName)
-		technoTemp := structure.Technologie{}
-		technoTemp.Name = technoName
-		if a.ResultGlobal[technoName].(map[string]interface{})["cpe"] != nil {
-			technoTemp.Cpe = a.ResultGlobal[technoName].(map[string]interface{})["cpe"].(string)
-		}
+		technoTemp := a.NewTechno(technoName)
 		compiledregex := regexp.MustCompile("(?i)" + regex[0])
 		regexGroup := compiledregex.FindAllStringSubmatch(metaValue, -1)
 
@@ -433,4 +374,12 @@ func  (a *Analyze) analyze_meta(s *goquery.Selection,metaProperties interface{},
 		a.Technos = append(a.Technos, technoTemp)
 		a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 	}
+}
+func (a *Analyze) NewTechno(name string)(structure.Technologie){
+	technoTemp := structure.Technologie{}
+	technoTemp.Name = name
+	if a.ResultGlobal[name].(map[string]interface{})["cpe"] != nil {
+		technoTemp.Cpe = a.ResultGlobal[name].(map[string]interface{})["cpe"].(string)
+	}
+	return technoTemp
 }
