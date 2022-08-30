@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-    "errors"
 	"github.com/EasyRecon/wappaGo/analyze"
 	"github.com/EasyRecon/wappaGo/lib"
 	"github.com/EasyRecon/wappaGo/structure"
@@ -31,37 +30,23 @@ import (
 	pdhttputil "github.com/projectdiscovery/httputil"
 	"github.com/remeh/sizedwaitgroup"
 )
+type Cmd struct {
+	ChromeCtx 		context.Context
+	Dialer 			*fastdialer.Dialer
+	ResultGlobal 	map[string]interface{}
+	Cdn 			*cdncheck.Client
+	Options 		structure.Options
+}
 
 
-
-func Start(options structure.Options) {
-
-
+func (c *Cmd)Start() {
 	var portOpenByIp []structure.PortOpenByIp
-	if *options.Screenshot != "" {
-		if _, err := os.Stat(*options.Screenshot); errors.Is(err, os.ErrNotExist) {
-			err := os.Mkdir(*options.Screenshot, os.ModePerm)
-			if err != nil {
-				log.Println(err)
-			}
-		}
-	}
+	var err error
 
-	fastdialerOpts := fastdialer.DefaultOptions
-	fastdialerOpts.EnableFallback = true
-	fastdialerOpts.WithDialerHistory = true
+	c.Dialer = c.InitDialer()
+	defer c.Dialer.Close()
 
-	if len(*options.Resolvers) == 0 {
-		*options.Resolvers = "8.8.8.8,1.1.1.1,64.6.64.6,,74.82.42.42,1.0.0.1,8.8.4.4,64.6.65.6,77.88.8.8"
-	} 
-	fastdialerOpts.BaseResolvers = strings.Split(*options.Resolvers, ",")
 
-	dialer, err := fastdialer.NewDialer(fastdialerOpts)
-	defer dialer.Close()
-
-	if err != nil {
-		fmt.Errorf("could not create resolver cache: %s", err)
-	}
 	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
 	//urls, _ := reader.ReadString('\n')
 
@@ -79,10 +64,10 @@ func Start(options structure.Options) {
 	defer cancel1()
 
 	ctxAlloc1, cancel := chromedp.NewContext(ctxAlloc)
-	//ctxAlloc1, cancel := chromedp.NewContext(context.Background()) 
+	c.ChromeCtx = ctxAlloc1
 	defer cancel()
 
-	if err := chromedp.Run(ctxAlloc1); err != nil {
+	if err := chromedp.Run(c.ChromeCtx); err != nil {
 		panic(err)
 	}
 	folder, errDownload := technologies.DownloadTechnologies()
@@ -91,19 +76,19 @@ func Start(options structure.Options) {
 	}
 	defer os.RemoveAll(folder)
 	
-	resultGlobal := technologies.LoadTechnologiesFiles(folder)
+	c.ResultGlobal = technologies.LoadTechnologiesFiles(folder)
 
-	cdn, err := cdncheck.NewWithCache()
+	c.Cdn, err = cdncheck.NewWithCache()
 			if err != nil {
 			log.Fatal(err)
 		}
 	var url string
 	var ip string
-	swg := sizedwaitgroup.New(*options.Threads)
+	swg := sizedwaitgroup.New(*c.Options.Threads)
 	url=""
 	ip=""
 	for scanner.Scan() {
-		if *options.AmassInput {
+		if *c.Options.AmassInput {
 				var result map[string]interface{}
 				json.Unmarshal([]byte(scanner.Text()), &result)
 				url = result["name"].(string)
@@ -115,30 +100,30 @@ func Start(options structure.Options) {
 		go func(url string, ip string){
 			defer swg.Done()
 			
-			start(options,portOpenByIp,url,ip, cdn,resultGlobal,dialer,ctxAlloc1)
+			c.start(portOpenByIp,url,ip)
 		}(url,ip)
 	}
 	swg.Wait()
 }
 
 
-func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url string,ip string, cdn *cdncheck.Client,resultGlobal map[string]interface{},dialer *fastdialer.Dialer,ctxAlloc1 context.Context) {
-	portList := strings.Split(*options.Ports, ",")
+func (c *Cmd)start(portOpenByIp []structure.PortOpenByIp,url string,ip string) {
+	portList := strings.Split(*c.Options.Ports, ",")
 	swg1 := sizedwaitgroup.New(50)
-	swg := sizedwaitgroup.New(*options.ChromeThreads)
+	swg := sizedwaitgroup.New(*c.Options.ChromeThreads)
 	var CdnName string
 	portTemp := portList
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{}
 
-	if *options.FollowRedirect {
+	if *c.Options.FollowRedirect {
 		client = &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
-				DialContext:       dialer.Dial,
+				DialContext:       c.Dialer.Dial,
 				DisableKeepAlives: true,
 			},
 		}
@@ -150,7 +135,7 @@ func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url 
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
-				DialContext:       dialer.Dial,
+				DialContext:       c.Dialer.Dial,
 				DisableKeepAlives: true,
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -160,12 +145,12 @@ func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url 
 		}
 	}
 
-		if !*options.AmassInput {
+		if !*c.Options.AmassInput {
 			client.Get("http://" + url)
-			ip = dialer.GetDialedIP(url)
+			ip = c.Dialer.GetDialedIP(url)
 		}
 
-		isCDN, cdnName, err := cdn.Check(net.ParseIP(ip))
+		isCDN, cdnName, err := c.Cdn.Check(net.ParseIP(ip))
 		//fmt.Println(isCDN, ip)
 		if err != nil {
 			log.Fatal(err)
@@ -187,7 +172,7 @@ func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url 
 				swg1.Add()
 				go func(portEnum string, url string) {
 					defer swg1.Done()
-					openPort := scanPort("tcp", url, portEnum, *options.Porttimeout)
+					openPort := c.scanPort("tcp", url, portEnum, *c.Options.Porttimeout)
 					if openPort {
 						portOpen = append(portOpen, portEnum)
 					}
@@ -206,18 +191,16 @@ func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url 
 
 		for _, port := range portOpen {
 			swg.Add()
-			go func(port string, url string, portOpen []string, dialer *fastdialer.Dialer, CdnName string) {
+			go func(port string, url string, portOpen []string, CdnName string) {
 				defer swg.Done()
-				lauchChrome(url, port, ctxAlloc1, resultGlobal, *options.Screenshot, dialer, portOpen, CdnName, *options.FollowRedirect)
-			}(port, url, portOpen, dialer, CdnName)
+				c.lauchChrome(url, port, portOpen, CdnName)
+			}(port, url, portOpen, CdnName)
 		}
 		swg.Wait()
 
 }
-func getWrapper(){
 
-}
-func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string, followRedirect bool) {
+func (c *Cmd)lauchChrome(urlData string, port string,portOpen []string, CdnName string) {
 	data := structure.Data{}
 	data.Infos.CDN = CdnName
 	data.Infos.Data = urlData
@@ -236,14 +219,14 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{}
 
-	if followRedirect {
+	if *c.Options.FollowRedirect {
 		client = &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
-				DialContext:       dialer.Dial,
+				DialContext:       c.Dialer.Dial,
 				DisableKeepAlives: true,
 			},
 		}
@@ -255,7 +238,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
-				DialContext:       dialer.Dial,
+				DialContext:       c.Dialer.Dial,
 				DisableKeepAlives: true,
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -282,7 +265,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 
 				errorContinue = false
 			} else {
-				data, TempResp, _ = DefineBasicMetric(data, resp)
+				data, TempResp, _ = c.DefineBasicMetric(data, resp)
 				if data.Infos.Scheme == "" {
 					data.Infos.Scheme = "http"
 				}
@@ -291,16 +274,16 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 			}
 		}
 	} else {
-		data, TempResp, _ = DefineBasicMetric(data, resp)
+		data, TempResp, _ = c.DefineBasicMetric(data, resp)
 		if data.Infos.Scheme == "" {
 			data.Infos.Scheme = "https"
 		}
 		urlData = "https://" + urlDataPort
 		data.Url = urlData
 	}
-	ip := dialer.GetDialedIP(data.Infos.Data)
+	ip := c.Dialer.GetDialedIP(data.Infos.Data)
 	data.Infos.IP = ip
-	dnsData, err := dialer.GetDNSData(orginalHost)
+	dnsData, err := c.Dialer.GetDNSData(orginalHost)
 	if dnsData != nil && err == nil {
 		data.Infos.Cname = dnsData.CNAME
 	}
@@ -308,7 +291,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		if data.Infos.Location != "" {
 			urlData = data.Infos.Location
 		}
-		ctxAlloc1, _ = context.WithTimeout(ctxAlloc1, 60*time.Second)
+		ctxAlloc1, _ := context.WithTimeout(c.ChromeCtx, 60*time.Second)
 		cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
 		chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 			if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
@@ -357,7 +340,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 						srcList = append(srcList, srcLink)
 					}
 				})
-				analyseStruct := analyze.Analyze{resultGlobal, TempResp, srcList, ctx, data.Infos, cookiesList, node, body,[]structure.Technologie{}}
+				analyseStruct := analyze.Analyze{c.ResultGlobal, TempResp, srcList, ctx, data.Infos, cookiesList, node, body,[]structure.Technologie{}}
 
 				data.Infos.Technologies = analyseStruct.Run()
 
@@ -367,13 +350,13 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 
 
 		data.Infos.Technologies = technologies.DedupTechno(data.Infos.Technologies)
-		if screen != "" && len(buf) > 0 {
+		if *c.Options.Screenshot != "" && len(buf) > 0 {
 			imgTitle := strings.Replace(urlData, ":", "_", -1)
 			imgTitle = strings.Replace(imgTitle, "/", "", -1)
 			imgTitle = strings.Replace(imgTitle, ".", "_", -1)
 			//fmt.Println(screen + "/" + imgTitle + ".png")
 			file, _ := os.OpenFile(
-				screen+"/"+imgTitle+".png",
+				*c.Options.Screenshot +"/"+imgTitle+".png",
 				os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
 				0666,
 			)
@@ -390,7 +373,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 	}
 }
 
-func scanPort(protocol, hostname string, port string, portTimeout int) bool {
+func (c *Cmd)scanPort(protocol, hostname string, port string, portTimeout int) bool {
 	address := hostname + ":" + port
 	conn, err := net.DialTimeout(protocol, address, time.Duration(portTimeout)*time.Millisecond)
 	if err != nil {
@@ -476,7 +459,27 @@ get_response:
 	return &resp, nil
 }
 
-func DefineBasicMetric(data structure.Data, resp *structure.Response) (structure.Data, structure.Response, error) {
+
+func (c *Cmd)InitDialer()(*fastdialer.Dialer){
+	fastdialerOpts := fastdialer.DefaultOptions
+	fastdialerOpts.EnableFallback = true
+	fastdialerOpts.WithDialerHistory = true
+
+	if len(*c.Options.Resolvers) == 0 {
+		*c.Options.Resolvers = "8.8.8.8,1.1.1.1,64.6.64.6,,74.82.42.42,1.0.0.1,8.8.4.4,64.6.65.6,77.88.8.8"
+	} 
+	fastdialerOpts.BaseResolvers = strings.Split(*c.Options.Resolvers, ",")
+
+	dialer, err := fastdialer.NewDialer(fastdialerOpts)
+	if err != nil {
+		fmt.Errorf("could not create resolver cache: %s", err)
+	}
+	return dialer
+}
+
+
+
+func (c *Cmd)DefineBasicMetric(data structure.Data, resp *structure.Response) (structure.Data, structure.Response, error) {
 
 	if (resp.StatusCode == 301 || resp.StatusCode == 302) && len(resp.Headers["Location"]) > 0 {
 		data.Infos.Location = resp.Headers["Location"][0]

@@ -33,5 +33,7 @@ func configure(options structure.Options){
 			}
 		}
 	}
-	cmd.Start(options)
+	c := cmd.Cmd{}
+	c.Options = options
+	c.Start()
 }
