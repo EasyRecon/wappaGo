@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -35,19 +34,9 @@ import (
 
 
 
-func Start() {
+func Start(options structure.Options) {
 
-	options := structure.Options{}
-	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
-	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
-	options.Threads = flag.Int("threads", 5, "Number of threads to start recon in same time")
-	options.Porttimeout = flag.Int("port-timeout", 1000, "Timeout during port scanning in ms")
-	//options.ChromeTimeout = flag.Int("chrome-timeout", 0000, "Timeout during navigation (chrome) in sec")
-	options.ChromeThreads = flag.Int("chrome-threads", 5, "Number of chromes threads in each main threads total = option.threads*option.chrome-threads (Default 5)")
-	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
-	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
-	options.FollowRedirect = flag.Bool("follow-redirect", false, "Follow redirect to detect technologie")
-	flag.Parse()
+
 	var portOpenByIp []structure.PortOpenByIp
 	if *options.Screenshot != "" {
 		if _, err := os.Stat(*options.Screenshot); errors.Is(err, os.ErrNotExist) {
@@ -135,7 +124,7 @@ func Start() {
 
 func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url string,ip string, cdn *cdncheck.Client,resultGlobal map[string]interface{},dialer *fastdialer.Dialer,ctxAlloc1 context.Context) {
 	portList := strings.Split(*options.Ports, ",")
-	swg1 := sizedwaitgroup.New(len(portList))
+	swg1 := sizedwaitgroup.New(50)
 	swg := sizedwaitgroup.New(*options.ChromeThreads)
 	var CdnName string
 	portTemp := portList
@@ -225,7 +214,9 @@ func start(options structure.Options, portOpenByIp []structure.PortOpenByIp,url 
 		swg.Wait()
 
 }
+func getWrapper(){
 
+}
 func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultGlobal map[string]interface{}, screen string, dialer *fastdialer.Dialer, portOpen []string, CdnName string, followRedirect bool) {
 	data := structure.Data{}
 	data.Infos.CDN = CdnName
@@ -317,7 +308,7 @@ func lauchChrome(urlData string, port string, ctxAlloc1 context.Context, resultG
 		if data.Infos.Location != "" {
 			urlData = data.Infos.Location
 		}
-		ctxAlloc1, _ = context.WithTimeout(ctxAlloc1, 30*time.Second)
+		ctxAlloc1, _ = context.WithTimeout(ctxAlloc1, 60*time.Second)
 		cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
 		chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
 			if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
