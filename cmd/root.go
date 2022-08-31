@@ -167,7 +167,8 @@ func (c *Cmd)getWrapper(urlData string, port string,portOpen []string, CdnName s
 		urlDataPort = urlData
 	}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	client := c.getClientCtx()
+	c.getClientCtx()
+	client := c.HttpClient
 	var TempResp structure.Response
 	//resp, errSSL = client.Get("https://" + urlDataPort)
 	var errSSL error

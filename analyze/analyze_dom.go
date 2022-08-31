@@ -73,8 +73,8 @@ func  (a *Analyze) analyze_dom_attribute(technoName string,domKeyElement2 string
 				compiledregex := regexp.MustCompile("(?i)" + regex[0])
 				regexGroup := compiledregex.FindAllStringSubmatch(dommAttr, -1)
 																
-				if len(regex) > 1 && strings.HasPrefix(regex[1], "version") && versionGrp := strings.Split(regex[1], "\\");len(versionGrp) > 1 {
-					//versionGrp := strings.Split(regex[1], "\\")
+				if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
+					versionGrp := strings.Split(regex[1], "\\")
 																		
 					if len(versionGrp) > 1 {
 						offset, _ := strconv.Atoi(versionGrp[1])
