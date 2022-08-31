@@ -6,6 +6,7 @@ import (
 	"log"
 	"errors"
 	"github.com/EasyRecon/wappaGo/structure"
+	"github.com/EasyRecon/wappaGo/technologies"
 	"github.com/EasyRecon/wappaGo/cmd"
 )
 
@@ -33,7 +34,13 @@ func configure(options structure.Options){
 			}
 		}
 	}
+	folder, errDownload := technologies.DownloadTechnologies()
+	if errDownload != nil {
+		log.Println("error during downbloading techno file")
+	}
+	defer os.RemoveAll(folder)
 	c := cmd.Cmd{}
+	c.ResultGlobal = technologies.LoadTechnologiesFiles(folder)
 	c.Options = options
 	c.Start()
 }

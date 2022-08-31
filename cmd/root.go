@@ -36,17 +36,14 @@ type Cmd struct {
 	ResultGlobal 	map[string]interface{}
 	Cdn 			*cdncheck.Client
 	Options 		structure.Options
+	PortOpenByIP    []structure.PortOpenByIp
 }
 
 
 func (c *Cmd)Start() {
-	var portOpenByIp []structure.PortOpenByIp
 	var err error
-
 	c.Dialer = c.InitDialer()
 	defer c.Dialer.Close()
-
-
 	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
 	//urls, _ := reader.ReadString('\n')
 
@@ -70,13 +67,7 @@ func (c *Cmd)Start() {
 	if err := chromedp.Run(c.ChromeCtx); err != nil {
 		panic(err)
 	}
-	folder, errDownload := technologies.DownloadTechnologies()
-	if errDownload != nil {
-		fmt.Println("error during downbloading techno file")
-	}
-	defer os.RemoveAll(folder)
-	
-	c.ResultGlobal = technologies.LoadTechnologiesFiles(folder)
+
 
 	c.Cdn, err = cdncheck.NewWithCache()
 			if err != nil {
@@ -100,24 +91,21 @@ func (c *Cmd)Start() {
 		go func(url string, ip string){
 			defer swg.Done()
 			
-			c.start(portOpenByIp,url,ip)
+			c.start(url,ip)
 		}(url,ip)
 	}
 	swg.Wait()
 }
 
 
-func (c *Cmd)start(portOpenByIp []structure.PortOpenByIp,url string,ip string) {
+func (c *Cmd)start(url string,ip string) {
 	portList := strings.Split(*c.Options.Ports, ",")
 	swg1 := sizedwaitgroup.New(50)
 	swg := sizedwaitgroup.New(*c.Options.ChromeThreads)
 	var CdnName string
 	portTemp := portList
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	client := &http.Client{}
-
-	if *c.Options.FollowRedirect {
-		client = &http.Client{
+	client := &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -127,23 +115,12 @@ func (c *Cmd)start(portOpenByIp []structure.PortOpenByIp,url string,ip string) {
 				DisableKeepAlives: true,
 			},
 		}
-
-	} else {
-		client = &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-				DialContext:       c.Dialer.Dial,
-				DisableKeepAlives: true,
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				//data.Infos.Location = fmt.Sprintf("%s", req.URL)
-				return http.ErrUseLastResponse
-			},
+	if !*c.Options.FollowRedirect {
+		client.CheckRedirect= func(req *http.Request, via []*http.Request) error {
+			//data.Infos.Location = fmt.Sprintf("%s", req.URL)
+			return http.ErrUseLastResponse
 		}
-	}
+	} 
 
 		if !*c.Options.AmassInput {
 			client.Get("http://" + url)
@@ -162,7 +139,7 @@ func (c *Cmd)start(portOpenByIp []structure.PortOpenByIp,url string,ip string) {
 		}
 
 		var portOpen []string
-		alreadyScanned := lib.CheckIpAlreadyScan(ip, portOpenByIp)
+		alreadyScanned := lib.CheckIpAlreadyScan(ip, c.PortOpenByIP)
 
 		if alreadyScanned.IP != "" {
 			portOpen = alreadyScanned.Open_port
@@ -183,24 +160,21 @@ func (c *Cmd)start(portOpenByIp []structure.PortOpenByIp,url string,ip string) {
 			var tempScanned structure.PortOpenByIp
 			tempScanned.IP = ip
 			tempScanned.Open_port = portOpen
-			portOpenByIp = append(portOpenByIp, tempScanned)
-
+			c.PortOpenByIP = append(c.PortOpenByIP, tempScanned)
 		}
-
 		url = strings.TrimSpace(url)
 
 		for _, port := range portOpen {
 			swg.Add()
 			go func(port string, url string, portOpen []string, CdnName string) {
 				defer swg.Done()
-				c.lauchChrome(url, port, portOpen, CdnName)
+				c.getWrapper(url, port, portOpen, CdnName)
 			}(port, url, portOpen, CdnName)
 		}
 		swg.Wait()
-
 }
 
-func (c *Cmd)lauchChrome(urlData string, port string,portOpen []string, CdnName string) {
+func (c *Cmd)getWrapper(urlData string, port string,portOpen []string, CdnName string) {
 	data := structure.Data{}
 	data.Infos.CDN = CdnName
 	data.Infos.Data = urlData
@@ -288,6 +262,11 @@ func (c *Cmd)lauchChrome(urlData string, port string,portOpen []string, CdnName 
 		data.Infos.Cname = dnsData.CNAME
 	}
 	if errorContinue {
+		c.lauchChrome(TempResp ,data, urlData , port,portOpen , CdnName)
+	}
+}
+func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlData string, port string,portOpen []string, CdnName string) {
+	    var err error
 		if data.Infos.Location != "" {
 			urlData = data.Infos.Location
 		}
@@ -370,7 +349,7 @@ func (c *Cmd)lauchChrome(urlData string, port string,portOpen []string, CdnName 
 			fmt.Println("Error:", err)
 		}
 		fmt.Println(string(b))
-	}
+	
 }
 
 func (c *Cmd)scanPort(protocol, hostname string, port string, portTimeout int) bool {
@@ -477,6 +456,9 @@ func (c *Cmd)InitDialer()(*fastdialer.Dialer){
 	return dialer
 }
 
+func (c *Cmd)getClientCtx(){
+
+}
 
 
 func (c *Cmd)DefineBasicMetric(data structure.Data, resp *structure.Response) (structure.Data, structure.Response, error) {
