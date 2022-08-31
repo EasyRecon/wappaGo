@@ -192,8 +192,6 @@ func (c *Cmd)getWrapper(urlData string, port string,portOpen []string, CdnName s
 	}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	client := &http.Client{}
-
-	if *c.Options.FollowRedirect {
 		client = &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
@@ -204,24 +202,13 @@ func (c *Cmd)getWrapper(urlData string, port string,portOpen []string, CdnName s
 				DisableKeepAlives: true,
 			},
 		}
+	if !*c.Options.FollowRedirect {
 
-	} else {
-		client = &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-				DialContext:       c.Dialer.Dial,
-				DisableKeepAlives: true,
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		client.CheckRedirect= func(req *http.Request, via []*http.Request) error {
 				//data.Infos.Location = fmt.Sprintf("%s", req.URL)
 				return http.ErrUseLastResponse
-			},
-		}
+			}
 	}
-
 	var TempResp structure.Response
 	//resp, errSSL = client.Get("https://" + urlDataPort)
 	var errSSL error
