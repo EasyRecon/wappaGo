@@ -64,8 +64,8 @@ func  (a *Analyze) analyze_dom_exist(technoName string,domKeyElement2 string,dom
 
 func  (a *Analyze) analyze_dom_attribute(technoName string,domKeyElement2 string,domElement2 interface{},s *goquery.Selection){
 	dommAttr, _ := s.Attr(domKeyElement2)
-	if dommAttr != "" {
-		if domKeyElement2 != "" {
+
+		if dommAttr != ""  && domKeyElement2 != "" {
 			regex := strings.Split(domElement2.(string), "\\;")
 			findRegex, _ := regexp.MatchString("(?i)"+regex[0], dommAttr)
 			if findRegex {
@@ -73,8 +73,8 @@ func  (a *Analyze) analyze_dom_attribute(technoName string,domKeyElement2 string
 				compiledregex := regexp.MustCompile("(?i)" + regex[0])
 				regexGroup := compiledregex.FindAllStringSubmatch(dommAttr, -1)
 																
-				if len(regex) > 1 && strings.HasPrefix(regex[1], "version") {
-					versionGrp := strings.Split(regex[1], "\\")
+				if len(regex) > 1 && strings.HasPrefix(regex[1], "version") && versionGrp := strings.Split(regex[1], "\\");len(versionGrp) > 1 {
+					//versionGrp := strings.Split(regex[1], "\\")
 																		
 					if len(versionGrp) > 1 {
 						offset, _ := strconv.Atoi(versionGrp[1])
@@ -90,7 +90,7 @@ func  (a *Analyze) analyze_dom_attribute(technoName string,domKeyElement2 string
 			a.Technos = append(a.Technos, technoTemp)
 			a.Technos = technologies.CheckRequired(technoTemp.Name, a.ResultGlobal, a.Technos)
 		}
-	}
+	
 }
 
 

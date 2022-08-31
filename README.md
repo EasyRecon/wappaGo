@@ -27,7 +27,11 @@ Download the latest [release](https://github.com/EasyRecon/wappaGo/releases)  or
 
 ```bash
 git clone https://github.com/EasyRecon/wappaGo
-cd wappaGo && go build wappaGo.go
+cd wappaGo && go build 
+```
+or
+```
+go install github.com/EasyRecon/wappaGo@latest
 ```
 
 **Note :** _wappaGo requires Chrome to be present on the system and on Linux & MacOS wappaGo must be root_
@@ -69,8 +73,7 @@ cat out.json | ./wappaGo -amass-input
 
 ## Todo
 
-  - Increase speed
-  - Code refacto
+  - Add dns technologie dectection
 
 
 ## Thank's
