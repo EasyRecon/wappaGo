@@ -37,6 +37,7 @@ type Cmd struct {
 	Cdn 			*cdncheck.Client
 	Options 		structure.Options
 	PortOpenByIP    []structure.PortOpenByIp
+	HttpClient		*http.Client
 }
 
 
@@ -90,43 +91,23 @@ func (c *Cmd)Start() {
 		swg.Add()
 		go func(url string, ip string){
 			defer swg.Done()
-			
-			c.start(url,ip)
+			c.startPortScan(url,ip)
 		}(url,ip)
 	}
 	swg.Wait()
 }
 
 
-func (c *Cmd)start(url string,ip string) {
+func (c *Cmd)startPortScan(url string,ip string) {
 	portList := strings.Split(*c.Options.Ports, ",")
 	swg1 := sizedwaitgroup.New(50)
 	swg := sizedwaitgroup.New(*c.Options.ChromeThreads)
 	var CdnName string
 	portTemp := portList
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	client := &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-				DialContext:       c.Dialer.Dial,
-				DisableKeepAlives: true,
-			},
-		}
-	if !*c.Options.FollowRedirect {
-		client.CheckRedirect= func(req *http.Request, via []*http.Request) error {
-			//data.Infos.Location = fmt.Sprintf("%s", req.URL)
-			return http.ErrUseLastResponse
-		}
-	} 
-
 		if !*c.Options.AmassInput {
-			client.Get("http://" + url)
-			ip = c.Dialer.GetDialedIP(url)
+			ip = c.getIP(url)
 		}
-
 		isCDN, cdnName, err := c.Cdn.Check(net.ParseIP(ip))
 		//fmt.Println(isCDN, ip)
 		if err != nil {
@@ -137,14 +118,11 @@ func (c *Cmd)start(url string,ip string) {
 			portTemp = []string{"80", "443"}
 			CdnName = cdnName
 		}
-
 		var portOpen []string
 		alreadyScanned := lib.CheckIpAlreadyScan(ip, c.PortOpenByIP)
-
 		if alreadyScanned.IP != "" {
 			portOpen = alreadyScanned.Open_port
 		} else {
-
 			for _, portEnum := range portTemp {
 				swg1.Add()
 				go func(portEnum string, url string) {
@@ -154,7 +132,6 @@ func (c *Cmd)start(url string,ip string) {
 						portOpen = append(portOpen, portEnum)
 					}
 				}(portEnum,url)
-
 			}
 			swg1.Wait()
 			var tempScanned structure.PortOpenByIp
@@ -163,7 +140,6 @@ func (c *Cmd)start(url string,ip string) {
 			c.PortOpenByIP = append(c.PortOpenByIP, tempScanned)
 		}
 		url = strings.TrimSpace(url)
-
 		for _, port := range portOpen {
 			swg.Add()
 			go func(port string, url string, portOpen []string, CdnName string) {
@@ -191,24 +167,7 @@ func (c *Cmd)getWrapper(urlData string, port string,portOpen []string, CdnName s
 		urlDataPort = urlData
 	}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	client := &http.Client{}
-		client = &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-				DialContext:       c.Dialer.Dial,
-				DisableKeepAlives: true,
-			},
-		}
-	if !*c.Options.FollowRedirect {
-
-		client.CheckRedirect= func(req *http.Request, via []*http.Request) error {
-				//data.Infos.Location = fmt.Sprintf("%s", req.URL)
-				return http.ErrUseLastResponse
-			}
-	}
+	client := c.getClientCtx()
 	var TempResp structure.Response
 	//resp, errSSL = client.Get("https://" + urlDataPort)
 	var errSSL error
@@ -444,8 +403,32 @@ func (c *Cmd)InitDialer()(*fastdialer.Dialer){
 }
 
 func (c *Cmd)getClientCtx(){
-
+	if c.HttpClient == (&http.Client{}) {
+		c.HttpClient = &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				DialContext:       c.Dialer.Dial,
+				DisableKeepAlives: true,
+			},
+		}
+		if !*c.Options.FollowRedirect {
+			c.HttpClient.CheckRedirect= func(req *http.Request, via []*http.Request) error {
+				//data.Infos.Location = fmt.Sprintf("%s", req.URL)
+				return http.ErrUseLastResponse
+			}
+		} 
+	}
 }
+func (c *Cmd)getIP(url string)(string){
+	c.getClientCtx()
+	c.HttpClient.Get("http://" + url)
+	ip := c.Dialer.GetDialedIP(url)
+	return ip
+}
+
 
 
 func (c *Cmd)DefineBasicMetric(data structure.Data, resp *structure.Response) (structure.Data, structure.Response, error) {
