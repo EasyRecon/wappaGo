@@ -19,6 +19,8 @@ func (a *Analyze) analyze_dns_main(technoName string,key string){
 			    resultDNS = a.DnsData.NS
 			case "CNAME":
 			    resultDNS = a.DnsData.CNAME
+			case "MX":
+			    resultDNS = a.DnsData.MX
 		}
 		if fmt.Sprintf("%T",value) == "string" {
 			found := a.analyze_dns_regex(value.(string),resultDNS)
