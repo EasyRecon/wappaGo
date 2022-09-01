@@ -8,6 +8,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	cdp "github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
+	"github.com/projectdiscovery/retryabledns"
 
 )
 
@@ -21,6 +22,7 @@ type Analyze struct {
 	Node 			*cdp.Node
 	Body 			string
 	Technos    		[]structure.Technologie
+	DnsData			*retryabledns.DNSData
 }
 
 

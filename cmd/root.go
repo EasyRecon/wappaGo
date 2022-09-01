@@ -105,8 +105,25 @@ func (c *Cmd)startPortScan(url string,ip string) {
 	var CdnName string
 	portTemp := portList
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	c.HttpClient = &http.Client{
+					Timeout: 10 * time.Second,
+					Transport: &http.Transport{
+						TLSClientConfig: &tls.Config{
+							InsecureSkipVerify: true,
+						},
+						DialContext:       c.Dialer.Dial,
+						DisableKeepAlives: true,
+					},
+				}
+				if !*c.Options.FollowRedirect {
+					c.HttpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+						//data.Infos.Location = fmt.Sprintf("%s", req.URL)
+						return http.ErrUseLastResponse
+					}
+				} 
 		if !*c.Options.AmassInput {
-			ip = c.getIP(url)
+				c.HttpClient.Get("http://" + url)
+				ip = c.Dialer.GetDialedIP(url)
 		}
 		isCDN, cdnName, err := c.Cdn.Check(net.ParseIP(ip))
 		//fmt.Println(isCDN, ip)
@@ -142,33 +159,32 @@ func (c *Cmd)startPortScan(url string,ip string) {
 		url = strings.TrimSpace(url)
 		for _, port := range portOpen {
 			swg.Add()
-			go func(port string, url string, portOpen []string, CdnName string) {
+			go func(port string, url string,  portOpen []string, CdnName string ) {
 				defer swg.Done()
-				c.getWrapper(url, port, portOpen, CdnName)
-			}(port, url, portOpen, CdnName)
+				data := structure.Data{}
+				data.Infos.CDN 		= CdnName
+				data.Infos.Data 	= url
+				data.Infos.Ports 	= portOpen
+				data.Infos.IP 		= ip
+				c.getWrapper(url, port,data)
+			}( port,url, portOpen, CdnName)
 		}
 		swg.Wait()
 }
 
-func (c *Cmd)getWrapper(urlData string, port string,portOpen []string, CdnName string) {
-	data := structure.Data{}
-	data.Infos.CDN = CdnName
-	data.Infos.Data = urlData
-	data.Infos.Ports = portOpen
+func (c *Cmd)getWrapper(urlData string, port string,data structure.Data) {
 	errorContinue := true
-
 	//u, err := url.Parse(urlData)
 	var urlDataPort string
 	var resp *structure.Response
-	var orginalHost = urlData
 	if port != "80" && port != "443" {
 		urlDataPort = urlData + ":" + port
 	} else {
 		urlDataPort = urlData
 	}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	c.getClientCtx()
-	client := c.HttpClient
+	client :=c.getClientCtx()
+
 	var TempResp structure.Response
 	//resp, errSSL = client.Get("https://" + urlDataPort)
 	var errSSL error
@@ -202,20 +218,18 @@ func (c *Cmd)getWrapper(urlData string, port string,portOpen []string, CdnName s
 		urlData = "https://" + urlDataPort
 		data.Url = urlData
 	}
-	ip := c.Dialer.GetDialedIP(data.Infos.Data)
-	data.Infos.IP = ip
-	dnsData, err := c.Dialer.GetDNSData(orginalHost)
-	if dnsData != nil && err == nil {
-		data.Infos.Cname = dnsData.CNAME
-	}
 	if errorContinue {
-		c.lauchChrome(TempResp ,data, urlData , port,portOpen , CdnName)
+		c.lauchChrome(TempResp ,data, urlData , port)
 	}
 }
-func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlData string, port string,portOpen []string, CdnName string) {
+func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlData string, port string,) {
 	    var err error
 		if data.Infos.Location != "" {
 			urlData = data.Infos.Location
+		}
+		dnsData, err := c.Dialer.GetDNSData(data.Infos.Data)
+		if dnsData != nil && err == nil {
+			data.Infos.Cname = dnsData.CNAME
 		}
 		ctxAlloc1, _ := context.WithTimeout(c.ChromeCtx, 60*time.Second)
 		cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
@@ -266,7 +280,17 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 						srcList = append(srcList, srcLink)
 					}
 				})
-				analyseStruct := analyze.Analyze{c.ResultGlobal, TempResp, srcList, ctx, data.Infos, cookiesList, node, body,[]structure.Technologie{}}
+				analyseStruct := analyze.Analyze{}
+				analyseStruct.ResultGlobal = c.ResultGlobal
+				analyseStruct.Resp 		   = TempResp
+				analyseStruct.SrcList 	   = srcList
+				analyseStruct.Ctx 	   	   = ctx
+				analyseStruct.Hote 	   	   = data.Infos
+				analyseStruct.CookiesList  = cookiesList
+				analyseStruct.Node 		   = node
+				analyseStruct.Body         = body
+				analyseStruct.Technos      = []structure.Technologie{}
+				analyseStruct.DnsData      = dnsData
 
 				data.Infos.Technologies = analyseStruct.Run()
 
@@ -403,9 +427,9 @@ func (c *Cmd)InitDialer()(*fastdialer.Dialer){
 	return dialer
 }
 
-func (c *Cmd)getClientCtx(){
+func (c *Cmd)getClientCtx()(*http.Client){
 	if c.HttpClient == (&http.Client{}) {
-		c.HttpClient = &http.Client{
+		client := &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -416,19 +440,17 @@ func (c *Cmd)getClientCtx(){
 			},
 		}
 		if !*c.Options.FollowRedirect {
-			c.HttpClient.CheckRedirect= func(req *http.Request, via []*http.Request) error {
+			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 				//data.Infos.Location = fmt.Sprintf("%s", req.URL)
 				return http.ErrUseLastResponse
 			}
 		} 
+		return  client
+	} else {
+		return c.HttpClient
 	}
 }
-func (c *Cmd)getIP(url string)(string){
-	c.getClientCtx()
-	c.HttpClient.Get("http://" + url)
-	ip := c.Dialer.GetDialedIP(url)
-	return ip
-}
+
 
 
 
