@@ -56,6 +56,9 @@ func (a *Analyze) Run() []structure.Technologie {
 				if key == "meta" {
 					a.analyze_meta_main(technoName,key,doc)
 				}
+				if key == "dns" {
+					a.analyze_dns_main(technoName,key)
+				}
 			}
 		}
 	}

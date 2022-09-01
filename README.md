@@ -73,7 +73,11 @@ cat out.json | ./wappaGo -amass-input
 
 ## Todo
 
-  - Add dns technologie dectection
+
+  - Add text technologie dectection
+  - Add certIssuer technologie dectection
+  - Add css technologie dectection
+  - Add xhr technologie dectection
 
 
 ## Thank's
