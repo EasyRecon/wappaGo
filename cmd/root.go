@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	URL "net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -60,6 +61,9 @@ func (c *Cmd)Start() {
 	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("disable-webgl", true))
 	optionsChromeCtx = append(optionsChromeCtx, chromedp.Flag("ignore-certificate-errors", true)) // RIP shittyproxy.go
 	optionsChromeCtx = append(optionsChromeCtx, chromedp.WindowSize(1400, 900))
+	if *c.Options.Proxy !="" {
+			optionsChromeCtx = append(optionsChromeCtx, chromedp.ProxyServer(*c.Options.Proxy))
+	}
 
 	//ctxAlloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false), chromedp.Flag("disable-gpu", true))...)
 	ctxAlloc, cancel1 := chromedp.NewExecAllocator(context.Background(),optionsChromeCtx...)
@@ -109,15 +113,25 @@ func (c *Cmd)startPortScan(url string,ip string) {
 	var CdnName string
 	portTemp := portList
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	c.HttpClient = &http.Client{
-					Timeout: 10 * time.Second,
-					Transport: &http.Transport{
+
+	transport := &http.Transport{
 						TLSClientConfig: &tls.Config{
 							InsecureSkipVerify: true,
 						},
 						DialContext:       c.Dialer.Dial,
 						DisableKeepAlives: true,
-					},
+					}
+	if *c.Options.Proxy != "" {
+			proxyURL, parseErr := URL.Parse(*c.Options.Proxy)
+			if parseErr == nil {
+				transport.Proxy = http.ProxyURL(proxyURL)
+				transport.TLSClientConfig.MinVersion= tls.VersionTLS12
+				transport.TLSClientConfig.MaxVersion= tls.VersionTLS12
+			}
+	}
+	c.HttpClient = &http.Client{
+					Timeout: 10 * time.Second,
+					Transport: transport,
 				}
 				if !*c.Options.FollowRedirect {
 					c.HttpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -125,6 +139,7 @@ func (c *Cmd)startPortScan(url string,ip string) {
 						return http.ErrUseLastResponse
 					}
 				} 
+
 		if !*c.Options.AmassInput {
 				c.HttpClient.Get("http://" + url)
 				ip = c.Dialer.GetDialedIP(url)
@@ -187,6 +202,13 @@ func (c *Cmd)getWrapper(urlData string, port string,data structure.Data) {
 		urlDataPort = urlData
 	}
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	if *c.Options.Proxy != "" {
+		proxyURL, parseErr := URL.Parse(*c.Options.Proxy)
+		if parseErr == nil {
+			http.DefaultTransport.(*http.Transport).Proxy = http.ProxyURL(proxyURL)
+			http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true,MinVersion:tls.VersionTLS12,MaxVersion:tls.VersionTLS12}
+		}
+    }
 	client :=c.getClientCtx()
 
 	var TempResp structure.Response
@@ -448,15 +470,24 @@ func (c *Cmd)InitDialer()(*fastdialer.Dialer){
 
 func (c *Cmd)getClientCtx()(*http.Client){
 	if c.HttpClient == (&http.Client{}) {
-		client := &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
+		transport := &http.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
 				DialContext:       c.Dialer.Dial,
 				DisableKeepAlives: true,
-			},
+			}
+		if *c.Options.Proxy != "" {
+				proxyURL, parseErr := URL.Parse(*c.Options.Proxy)
+				if parseErr == nil {
+					transport.Proxy = http.ProxyURL(proxyURL)
+					transport.TLSClientConfig.MinVersion= tls.VersionTLS12
+					transport.TLSClientConfig.MaxVersion= tls.VersionTLS12
+				}
+		}
+		client := &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: transport,
 		}
 		if !*c.Options.FollowRedirect {
 			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {

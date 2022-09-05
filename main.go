@@ -22,6 +22,7 @@ func main() {
 	options.Resolvers = flag.String("resolvers", "", "Use specifique resolver separated by comma")
 	options.AmassInput = flag.Bool("amass-input", false, "Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo")
 	options.FollowRedirect = flag.Bool("follow-redirect", false, "Follow redirect to detect technologie")
+	options.Proxy = flag.String("proxy", "", "Use http proxy")
 	flag.Parse()
 	configure(options)
 }

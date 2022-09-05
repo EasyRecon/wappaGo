@@ -33,7 +33,7 @@ type Host struct {
 	IP             string        `json:"ip"`
 	Cname          []string      `json:"cname,omitempty"`
 	CDN            string        `json:"cdn,omitempty"`
-	CertVhost      []string        `json:"certvhost,omitempty"`
+	CertVhost      []string      `json:"certvhost,omitempty"`
 }
 type Data struct {
 	Url   string `json:"url"`
@@ -50,6 +50,7 @@ type Options struct {
 	ChromeTimeout  *int
 	ChromeThreads  *int
 	Report		   *bool
+	Proxy		   *string
 }
 type Response struct {
 	StatusCode    int
