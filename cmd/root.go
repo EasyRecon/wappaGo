@@ -15,7 +15,10 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+	"crypto/x509"
+	"encoding/base64"
 	"github.com/EasyRecon/wappaGo/analyze"
+	"github.com/EasyRecon/wappaGo/report"
 	"github.com/EasyRecon/wappaGo/lib"
 	"github.com/EasyRecon/wappaGo/structure"
 	"github.com/EasyRecon/wappaGo/technologies"
@@ -38,6 +41,7 @@ type Cmd struct {
 	Options 		structure.Options
 	PortOpenByIP    []structure.PortOpenByIp
 	HttpClient		*http.Client
+	ResultArray		[]structure.Data
 }
 
 
@@ -254,6 +258,7 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 		// run task list
 		//var res []string
 		var buf []byte
+		analyseStruct := analyze.Analyze{}
 		err = chromedp.Run(cloneCTX,
 			chromedp.Navigate(urlData),
 			chromedp.Title(&data.Infos.Title),
@@ -261,13 +266,20 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 			chromedp.CaptureScreenshot(&buf),
 			chromedp.ActionFunc(func(ctx context.Context) error {
 
-				cookiesList, _ := network.GetCookies().Do(ctx)
-				node, _ := dom.GetDocument().Do(ctx)
-				body, _ := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
-				reader := strings.NewReader(body)
-				doc, err := goquery.NewDocumentFromReader(reader)
-
-				if err != nil {
+				cookiesList, _ 	:= network.GetCookies().Do(ctx)
+				if strings.HasPrefix(urlData,"https://" ){
+					sslcert,_ 			:= network.GetCertificate(urlData).Do(ctx)
+					sDec, _ := base64.StdEncoding.DecodeString(sslcert[0])
+					cert, _ := x509.ParseCertificate(sDec)
+					analyseStruct.CertVhost = cert.DNSNames
+					analyseStruct.CertIssuer = cert.Issuer.CommonName
+				}
+				node, _ 	   	:= dom.GetDocument().Do(ctx)
+				body, _ 		:= dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
+				reader 			:= strings.NewReader(body)
+				doc, err 		:= goquery.NewDocumentFromReader(reader)
+				
+				if err != nil {	
 					log.Fatal(err)
 				}
 				var srcList []string
@@ -280,7 +292,7 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 						srcList = append(srcList, srcLink)
 					}
 				})
-				analyseStruct := analyze.Analyze{}
+				
 				analyseStruct.ResultGlobal = c.ResultGlobal
 				analyseStruct.Resp 		   = TempResp
 				analyseStruct.SrcList 	   = srcList
@@ -293,7 +305,7 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 				analyseStruct.DnsData      = dnsData
 
 				data.Infos.Technologies = analyseStruct.Run()
-
+				data.Infos.CertVhost = analyseStruct.CertVhost
 				return nil
 			}),
 		)
@@ -314,13 +326,20 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 			file.Close()
 			data.Infos.Screenshot =  imgTitle + ".png"
 		}
-		b, err := json.Marshal(data)
+		if *c.Options.Report{
+			c.ResultArray = append(c.ResultArray,data)
+		} else {
+			b, err := json.Marshal(data)
 
-		if err != nil {
-			fmt.Println("Error:", err)
+			if err != nil {
+				fmt.Println("Error:", err)
+			}
+			fmt.Println(string(b))
 		}
-		fmt.Println(string(b))
-	
+		if *c.Options.Report{
+			report.Report_main(c.ResultArray,*c.Options.Screenshot)
+		}
+
 }
 
 func (c *Cmd)scanPort(protocol, hostname string, port string, portTimeout int) bool {
@@ -416,7 +435,7 @@ func (c *Cmd)InitDialer()(*fastdialer.Dialer){
 	fastdialerOpts.WithDialerHistory = true
 
 	if len(*c.Options.Resolvers) == 0 {
-		*c.Options.Resolvers = "8.8.8.8,1.1.1.1,64.6.64.6,,74.82.42.42,1.0.0.1,8.8.4.4,64.6.65.6,77.88.8.8"
+		*c.Options.Resolvers = "8.8.8.8,1.1.1.1,64.6.64.6,74.82.42.42,1.0.0.1,8.8.4.4,64.6.65.6,77.88.8.8"
 	} 
 	fastdialerOpts.BaseResolvers = strings.Split(*c.Options.Resolvers, ",")
 

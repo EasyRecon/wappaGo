@@ -23,6 +23,8 @@ type Analyze struct {
 	Body 			string
 	Technos    		[]structure.Technologie
 	DnsData			*retryabledns.DNSData
+	CertVhost		[]string
+	CertIssuer		string
 }
 
 
@@ -59,6 +61,10 @@ func (a *Analyze) Run() []structure.Technologie {
 				if key == "dns" {
 					a.analyze_dns_main(technoName,key)
 				}
+				if key == "certIssuer" {
+					a.analyze_cert_main(technoName,key)
+				}
+
 			}
 		}
 	}

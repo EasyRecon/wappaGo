@@ -15,7 +15,7 @@ type Technologie struct {
 const WappazlyerRoot = "https://raw.githubusercontent.com/wappalyzer/wappalyzer/master/src"
 const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url"}
+var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url","certIssuer"}
 
 type Host struct {
 	Status_code    int           `json:"status_code"`
@@ -33,6 +33,7 @@ type Host struct {
 	IP             string        `json:"ip"`
 	Cname          []string      `json:"cname,omitempty"`
 	CDN            string        `json:"cdn,omitempty"`
+	CertVhost      []string        `json:"certvhost,omitempty"`
 }
 type Data struct {
 	Url   string `json:"url"`
@@ -48,6 +49,7 @@ type Options struct {
 	FollowRedirect *bool
 	ChromeTimeout  *int
 	ChromeThreads  *int
+	Report		   *bool
 }
 type Response struct {
 	StatusCode    int

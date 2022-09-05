@@ -15,6 +15,7 @@ func main() {
 	options.Screenshot = flag.String("screenshot", "", "path to screenshot if empty no screenshot")
 	options.Ports = flag.String("ports", "80,443", "port want to scan separated by coma")
 	options.Threads = flag.Int("threads", 5, "Number of threads to start recon in same time")
+	options.Report = flag.Bool("report", false, "Generate HTML report")
 	options.Porttimeout = flag.Int("port-timeout", 2000, "Timeout during port scanning in ms")
 	//options.ChromeTimeout = flag.Int("chrome-timeout", 0000, "Timeout during navigation (chrome) in sec")
 	options.ChromeThreads = flag.Int("chrome-threads", 5, "Number of chromes threads in each main threads total = option.threads*option.chrome-threads (Default 5)")
