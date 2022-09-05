@@ -25,6 +25,8 @@ type Analyze struct {
 	DnsData			*retryabledns.DNSData
 	CertVhost		[]string
 	CertIssuer		string
+	CSSContent		[]string
+	XHRUrl   		[]string
 }
 
 
@@ -63,6 +65,9 @@ func (a *Analyze) Run() []structure.Technologie {
 				}
 				if key == "certIssuer" {
 					a.analyze_cert_main(technoName,key)
+				}
+				if key == "xhr" {
+					a.analyze_xhr_main(technoName,key)
 				}
 
 			}

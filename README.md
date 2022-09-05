@@ -41,21 +41,27 @@ go install github.com/EasyRecon/wappaGo@latest
 
 
 ```
-Usage of ./wappaGo:
+Usage of wappaGo:
   -amass-input
         Pip directly on Amass (Amass json output) like amass -d domain.tld | wappaGo
+  -chrome-threads int
+        Number of chromes threads in each main threads total = option.threads*option.chrome-threads (Default 5) (default 5)
   -follow-redirect
         Follow redirect to detect technologie
   -port-timeout int
-        Timeout during port scanning in ms (default 1000)
+        Timeout during port scanning in ms (default 2000)
   -ports string
         port want to scan separated by coma (default "80,443")
+  -proxy string
+        Use http proxy
+  -report
+        Generate HTML report
   -resolvers string
         Use specifique resolver separated by comma
   -screenshot string
         path to screenshot if empty no screenshot
   -threads int
-        Number of threads to scan port in same time (default 5)
+        Number of threads to start recon in same time (default 5)
 
 ```
 

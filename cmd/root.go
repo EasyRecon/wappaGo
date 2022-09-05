@@ -257,9 +257,24 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 		if dnsData != nil && err == nil {
 			data.Infos.Cname = dnsData.CNAME
 		}
+		analyseStruct := analyze.Analyze{}
 		ctxAlloc1, _ := context.WithTimeout(c.ChromeCtx, 60*time.Second)
 		cloneCTX, cancel := chromedp.NewContext(ctxAlloc1)
 		chromedp.ListenTarget(cloneCTX, func(ev interface{}) {
+			if _, ok := ev.(*network.EventResponseReceived); ok {
+				//data, _ := network.GetResponseBody(ev.(*network.EventResponseReceived).RequestID).Do(cloneCTX)
+
+				//log.Println(string(data))
+					switch typeDoc := ev.(*network.EventResponseReceived).Type; typeDoc {
+					case "XHR":
+						analyseStruct.XHRUrl = append(analyseStruct.XHRUrl,ev.(*network.EventResponseReceived).Response.URL)
+					case "Stylesheet":
+						//analyseStruct.CSSContent = append(analyseStruct.CSSContent,ev.(*network.EventResponseReceived).Response.URL)
+
+					case "Script":
+						//analyseStruct.CSSContent = append(analyseStruct.CSSContent,ev.(*network.EventResponseReceived).Response.URL)
+				}
+			}
 			if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
 				//fmt.Println("closing alert:", ev.Message)
 				go func() {
@@ -280,7 +295,7 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 		// run task list
 		//var res []string
 		var buf []byte
-		analyseStruct := analyze.Analyze{}
+		
 		err = chromedp.Run(cloneCTX,
 			chromedp.Navigate(urlData),
 			chromedp.Title(&data.Infos.Title),
@@ -325,7 +340,6 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 				analyseStruct.Body         = body
 				analyseStruct.Technos      = []structure.Technologie{}
 				analyseStruct.DnsData      = dnsData
-
 				data.Infos.Technologies = analyseStruct.Run()
 				data.Infos.CertVhost = analyseStruct.CertVhost
 				return nil

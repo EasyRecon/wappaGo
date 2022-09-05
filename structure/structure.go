@@ -15,7 +15,7 @@ type Technologie struct {
 const WappazlyerRoot = "https://raw.githubusercontent.com/wappalyzer/wappalyzer/master/src"
 const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url","certIssuer"}
+var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url","certIssuer","xhr"}
 
 type Host struct {
 	Status_code    int           `json:"status_code"`
