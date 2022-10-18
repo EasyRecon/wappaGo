@@ -12,6 +12,7 @@ import (
 
 
 func (a *Analyze)analyze_meta_main(technoName string,key string,doc *goquery.Document){
+
 	for metaKey, metaProperties := range a.ResultGlobal[technoName].(map[string]interface{})[key].(map[string]interface{}) {
 		doc.Find("meta[name=\"" + metaKey + "\" i]").Each(func(i int, s *goquery.Selection) {
 			if fmt.Sprintf("%T", metaProperties) == "string" {
@@ -31,7 +32,6 @@ func  (a *Analyze) analyze_meta(s *goquery.Selection,metaProperties interface{},
 	regex := strings.Split(fmt.Sprintf("%v", metaProperties), "\\;")
 	findregex, _ := regexp.MatchString("(?i)"+regex[0], metaValue)
 	if findregex == true {
-		//fmt.Println(technoName)
 		technoTemp := a.NewTechno(technoName)
 		compiledregex := regexp.MustCompile("(?i)" + regex[0])
 		regexGroup := compiledregex.FindAllStringSubmatch(metaValue, -1)

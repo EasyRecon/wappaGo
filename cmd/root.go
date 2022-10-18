@@ -178,7 +178,7 @@ func (c *Cmd)startPortScan(url string,ip string) {
 		url = strings.TrimSpace(url)
 		for _, port := range portOpen {
 			swg.Add()
-			go func(port string, url string,  portOpen []string, CdnName string ) {
+			go func(port string, url string,  portOpen []string, CdnName string,c *Cmd ) {
 				defer swg.Done()
 				data := structure.Data{}
 				data.Infos.CDN 		= CdnName
@@ -186,7 +186,7 @@ func (c *Cmd)startPortScan(url string,ip string) {
 				data.Infos.Ports 	= portOpen
 				data.Infos.IP 		= ip
 				c.getWrapper(url, port,data)
-			}( port,url, portOpen, CdnName)
+			}( port,url, portOpen, CdnName,c )
 		}
 		swg.Wait()
 }
@@ -306,10 +306,12 @@ func (c *Cmd)lauchChrome(TempResp structure.Response,data structure.Data, urlDat
 				cookiesList, _ 	:= network.GetCookies().Do(ctx)
 				if strings.HasPrefix(urlData,"https://" ){
 					sslcert,_ 			:= network.GetCertificate(urlData).Do(ctx)
+					if len(sslcert)>0 {
 					sDec, _ := base64.StdEncoding.DecodeString(sslcert[0])
 					cert, _ := x509.ParseCertificate(sDec)
 					analyseStruct.CertVhost = cert.DNSNames
 					analyseStruct.CertIssuer = cert.Issuer.CommonName
+					}
 				}
 				node, _ 	   	:= dom.GetDocument().Do(ctx)
 				body, _ 		:= dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)

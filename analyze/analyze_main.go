@@ -9,7 +9,6 @@ import (
 	cdp "github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/projectdiscovery/retryabledns"
-
 )
 
 type Analyze struct {
