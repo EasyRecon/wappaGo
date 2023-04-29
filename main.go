@@ -1,13 +1,14 @@
 package main
 
 import (
-	"flag"
-	"os"
-	"log"
 	"errors"
+	"flag"
+	"log"
+	"os"
+
+	"github.com/EasyRecon/wappaGo/cmd"
 	"github.com/EasyRecon/wappaGo/structure"
 	"github.com/EasyRecon/wappaGo/technologies"
-	"github.com/EasyRecon/wappaGo/cmd"
 )
 
 func main() {
@@ -27,7 +28,7 @@ func main() {
 	configure(options)
 }
 
-func configure(options structure.Options){
+func configure(options structure.Options) {
 	if *options.Screenshot != "" {
 		if _, err := os.Stat(*options.Screenshot); errors.Is(err, os.ErrNotExist) {
 			err := os.Mkdir(*options.Screenshot, os.ModePerm)
