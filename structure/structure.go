@@ -2,6 +2,7 @@ package structure
 
 import (
 	"time"
+
 	"github.com/projectdiscovery/cryptoutil"
 )
 
@@ -15,7 +16,7 @@ type Technologie struct {
 const WappazlyerRoot = "https://raw.githubusercontent.com/wappalyzer/wappalyzer/master/src"
 const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url","certIssuer","xhr"}
+var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url", "certIssuer", "xhr"}
 
 type Host struct {
 	Status_code    int           `json:"status_code"`
@@ -49,8 +50,19 @@ type Options struct {
 	FollowRedirect *bool
 	ChromeTimeout  *int
 	ChromeThreads  *int
-	Report		   *bool
-	Proxy		   *string
+	Report         *bool
+	Proxy          *string
+}
+type WrapperOptions struct {
+	Screenshot     string
+	Ports          string
+	Threads        int
+	Porttimeout    int
+	Resolvers      string
+	FollowRedirect bool
+	ChromeTimeout  int
+	ChromeThreads  int
+	Proxy          string
 }
 type Response struct {
 	StatusCode    int
@@ -62,9 +74,9 @@ type Response struct {
 	Words         int
 	Lines         int
 	TLSData       *cryptoutil.TLSData
-	HTTP2    	  bool
-	Pipeline 	  bool
-	Duration 	  time.Duration
+	HTTP2         bool
+	Pipeline      bool
+	Duration      time.Duration
 }
 
 type PortOpenByIp struct {

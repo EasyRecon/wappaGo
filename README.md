@@ -34,7 +34,7 @@ or
 go install github.com/EasyRecon/wappaGo@latest
 ```
 
-**Note :** _wappaGo requires Chrome to be present on the system and on Linux & MacOS wappaGo must be root_
+**Note :** _wappaGo requires Chrome to be present on the system_
 
 # Usage
 
@@ -76,6 +76,70 @@ or from an Amass output  (preferred)
 amass enum -d example.com -ipv4 -json out.json
 cat out.json | ./wappaGo -amass-input
 ```
+
+# Library
+
+You can use wappaGo as a library in your own project.
+
+## Options
+      
+```go
+type WrapperOptions struct {
+	Screenshot     string
+	Ports          string
+	Threads        int
+	Porttimeout    int
+	Resolvers      string
+	FollowRedirect bool
+	ChromeTimeout  int
+	ChromeThreads  int
+	Proxy          string
+}
+```
+
+## Example
+
+```go
+package main
+
+import (
+	"fmt"
+
+	"github.com/EasyRecon/wappaGo/structure"
+	"github.com/EasyRecon/wappaGo/wrapper"
+)
+
+func main() {
+	input := []string{"google.com", "twitter.com"}
+
+	options := structure.WrapperOptions{
+		Ports:      "80,443",
+		Screenshot: "screenshots",
+	}
+
+      // Async mode
+
+	results := make(chan structure.Data)
+
+	go func() {
+		for result := range results {
+			fmt.Println(result)
+		}
+	}()
+
+	wrapper.StartReconAsync(input, options, results)
+
+      // Sync mode
+
+      results := wrapper.StartReconSync(input, options)
+
+	for _, result := range results {
+		fmt.Println(result)
+	}
+}
+```
+
+For each url, you will receive a structure.Data which contains all the information about the target.
 
 ## Todo
 

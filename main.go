@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
@@ -39,11 +42,33 @@ func configure(options structure.Options) {
 	}
 	folder, errDownload := technologies.DownloadTechnologies()
 	if errDownload != nil {
-		log.Println("error during downbloading techno file")
+		log.Println("error during downloading techno file")
 	}
 	defer os.RemoveAll(folder)
+
+	var input []string
+	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
+	for scanner.Scan() {
+		input = append(input, scanner.Text())
+	}
+
 	c := cmd.Cmd{}
 	c.ResultGlobal = technologies.LoadTechnologiesFiles(folder)
 	c.Options = options
-	c.Start()
+	c.Input = input
+
+	results := make(chan structure.Data)
+
+	go func() {
+		for result := range results {
+			b, err := json.Marshal(result)
+
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Println(string(b))
+		}
+	}()
+
+	c.Start(results)
 }
