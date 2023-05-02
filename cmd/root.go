@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -45,14 +44,13 @@ type Cmd struct {
 	PortOpenByIP []structure.PortOpenByIp
 	HttpClient   *http.Client
 	ResultArray  []structure.Data
+	Input        []string
 }
 
-func (c *Cmd) Start() {
+func (c *Cmd) Start(results chan structure.Data) {
 	var err error
 	c.Dialer = c.InitDialer()
 	defer c.Dialer.Close()
-	var scanner = bufio.NewScanner(bufio.NewReader(os.Stdin))
-	//urls, _ := reader.ReadString('\n')
 
 	optionsChromeCtx := []chromedp.ExecAllocatorOption{}
 	optionsChromeCtx = append(optionsChromeCtx, chromedp.DefaultExecAllocatorOptions[:]...)
@@ -87,25 +85,26 @@ func (c *Cmd) Start() {
 	swg := sizedwaitgroup.New(*c.Options.Threads)
 	url = ""
 	ip = ""
-	for scanner.Scan() {
+	for _, line := range c.Input {
 		if *c.Options.AmassInput {
 			var result map[string]interface{}
-			json.Unmarshal([]byte(scanner.Text()), &result)
+			json.Unmarshal([]byte(line), &result)
 			url = result["name"].(string)
 			ip = result["addresses"].([]interface{})[0].(map[string]interface{})["ip"].(string)
 		} else {
-			url = scanner.Text()
+			url = line
 		}
 		swg.Add()
 		go func(url string, ip string) {
 			defer swg.Done()
-			c.startPortScan(url, ip)
+			c.startPortScan(url, ip, results)
 		}(url, ip)
 	}
 	swg.Wait()
+	close(results)
 }
 
-func (c *Cmd) startPortScan(url string, ip string) {
+func (c *Cmd) startPortScan(url string, ip string, results chan structure.Data) {
 	portList := strings.Split(*c.Options.Ports, ",")
 	swg1 := sizedwaitgroup.New(50)
 	swg := sizedwaitgroup.New(*c.Options.ChromeThreads)
@@ -184,13 +183,13 @@ func (c *Cmd) startPortScan(url string, ip string) {
 			data.Infos.Data = url
 			data.Infos.Ports = portOpen
 			data.Infos.IP = ip
-			c.getWrapper(url, port, data)
+			c.getWrapper(url, port, data, results)
 		}(port, url, portOpen, CdnName, c)
 	}
 	swg.Wait()
 }
 
-func (c *Cmd) getWrapper(urlData string, port string, data structure.Data) {
+func (c *Cmd) getWrapper(urlData string, port string, data structure.Data, results chan structure.Data) {
 	errorContinue := true
 	//u, err := url.Parse(urlData)
 	var urlDataPort string
@@ -244,10 +243,11 @@ func (c *Cmd) getWrapper(urlData string, port string, data structure.Data) {
 		data.Url = urlData
 	}
 	if errorContinue {
-		c.lauchChrome(TempResp, data, urlData, port)
+		c.launchChrome(TempResp, data, urlData, port, results)
 	}
 }
-func (c *Cmd) lauchChrome(TempResp structure.Response, data structure.Data, urlData string, port string) {
+
+func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, urlData string, port string, results chan structure.Data) {
 	var err error
 	if data.Infos.Location != "" {
 		urlData = data.Infos.Location
@@ -365,17 +365,11 @@ func (c *Cmd) lauchChrome(TempResp structure.Response, data structure.Data, urlD
 	if *c.Options.Report {
 		c.ResultArray = append(c.ResultArray, data)
 	} else {
-		b, err := json.Marshal(data)
-
-		if err != nil {
-			fmt.Println("Error:", err)
-		}
-		fmt.Println(string(b))
+		results <- data
 	}
 	if *c.Options.Report {
 		report.Report_main(c.ResultArray, *c.Options.Screenshot)
 	}
-
 }
 
 func (c *Cmd) scanPort(protocol, hostname string, port string, portTimeout int) bool {
