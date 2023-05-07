@@ -48,7 +48,6 @@ type Cmd struct {
 }
 
 func (c *Cmd) Start(results chan structure.Data) {
-	var err error
 	c.Dialer = c.InitDialer()
 	defer c.Dialer.Close()
 
@@ -76,10 +75,7 @@ func (c *Cmd) Start(results chan structure.Data) {
 		panic(err)
 	}
 
-	c.Cdn, err = cdncheck.NewWithCache()
-	if err != nil {
-		log.Fatal(err)
-	}
+	c.Cdn = cdncheck.New()
 	var url string
 	var ip string
 	swg := sizedwaitgroup.New(*c.Options.Threads)
@@ -142,7 +138,7 @@ func (c *Cmd) startPortScan(url string, ip string, results chan structure.Data) 
 		c.HttpClient.Get("http://" + url)
 		ip = c.Dialer.GetDialedIP(url)
 	}
-	isCDN, cdnName, err := c.Cdn.Check(net.ParseIP(ip))
+	isCDN, cdnName, _, err := c.Cdn.Check(net.ParseIP(ip))
 	//fmt.Println(isCDN, ip)
 	if err != nil {
 		log.Fatal(err)
