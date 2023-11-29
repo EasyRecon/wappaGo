@@ -13,7 +13,7 @@ type Technologie struct {
 	Confidence string `json:"confidence,omitempty"`
 }
 
-const WappazlyerRoot = "https://raw.githubusercontent.com/wappalyzer/wappalyzer/master/src"
+const WappazlyerRoot = "https://raw.githubusercontent.com/dochne/wappalyzer/master/src"
 const LetterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 var InterrestingKey = []string{"dns", "js", "meta", "text", "dom", "script", "html", "scriptSrc", "headers", "cookies", "url", "certIssuer", "xhr"}
