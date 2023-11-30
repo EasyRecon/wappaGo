@@ -309,32 +309,36 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 				}
 			}
 			node, _ := dom.GetDocument().Do(ctx)
-			body, _ := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
-			reader := strings.NewReader(body)
-			doc, err := goquery.NewDocumentFromReader(reader)
-
-			if err != nil {
-				log.Fatal(err)
-			}
-			var srcList []string
-			doc.Find("script").Each(func(i int, s *goquery.Selection) {
-				srcLink, exist := s.Attr("src")
-
-				if exist {
-
-					//fmt.Println(srcList, srcLink)
-					srcList = append(srcList, srcLink)
+			body, err := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
+			if err == nil {
+				reader := strings.NewReader(body)
+				doc, err := goquery.NewDocumentFromReader(reader)
+	
+				if err != nil {
+					log.Fatal(err)
 				}
-			})
+				var srcList []string
+				doc.Find("script").Each(func(i int, s *goquery.Selection) {
+					srcLink, exist := s.Attr("src")
+	
+					if exist {
+	
+						//fmt.Println(srcList, srcLink)
+						srcList = append(srcList, srcLink)
+					}
+				})
+				analyseStruct.SrcList = srcList
+				analyseStruct.Body = body
+			}
 
 			analyseStruct.ResultGlobal = c.ResultGlobal
 			analyseStruct.Resp = TempResp
-			analyseStruct.SrcList = srcList
+			
 			analyseStruct.Ctx = ctx
 			analyseStruct.Hote = data.Infos
 			analyseStruct.CookiesList = cookiesList
 			analyseStruct.Node = node
-			analyseStruct.Body = body
+
 			analyseStruct.Technos = []structure.Technologie{}
 			analyseStruct.DnsData = dnsData
 			data.Infos.Technologies = analyseStruct.Run()
