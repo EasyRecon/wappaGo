@@ -308,7 +308,10 @@ func (c *Cmd) launchChrome(TempResp structure.Response, data structure.Data, url
 					analyseStruct.CertIssuer = cert.Issuer.CommonName
 				}
 			}
-			node, _ := dom.GetDocument().Do(ctx)
+			node, err_node := dom.GetDocument().Do(ctx)
+			if err_node != nil {
+				return err_node
+			}
 			body, err := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
 			if err == nil {
 				reader := strings.NewReader(body)
